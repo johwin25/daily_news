@@ -22,3 +22,6 @@ jobs:
 
       - name: Run my first Python script
         run: python main.py
+
+      - name: Fetch Google News headlines
+        run: python news_fetcher.py
