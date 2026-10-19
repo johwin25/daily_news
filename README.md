@@ -6,7 +6,7 @@ Personal daily top-three global news briefing project.
 
 - Google News RSS collection for World, Economy, Technology, and Science.
 - Ten-publisher domain allowlist and offline parser tests.
-- Stage 3A: a manually triggered Gemini connection check.
+- Stage 3A complete: a live-verified, manually triggered Gemini connection check.
 - News ranking, independent-source corroboration, daily scheduling, and iPhone delivery are still to be built.
 
 ## Requirements and secret
@@ -92,9 +92,17 @@ in Google's pricing documentation checked that day.
 
 Only the model identifier changed in Python. The key, prompt, endpoint method,
 low thinking setting, token cap, and output validation are unchanged. All 15
-offline tests pass with this model identifier; a live Flash-Lite run is pending.
-Start a new manual workflow on the branch above to test it. Its opening log must
-name `gemini-3.5-flash-lite`; an old run still names `gemini-3.8-flash`.
-A successful response would establish connectivity to Flash-Lite and suggest the
-earlier failures were specific to the other model's serving path. A failure alone
-does not establish a key or project misconfiguration.
+offline tests pass with this model identifier.
+
+Live verification succeeded on October 19, 2026 at 14:30 UTC (23:30 Asia/Seoul):
+[successful workflow run](https://github.com/johwin25/daily_news/actions/runs/39269560989),
+code commit `16d3e3cf689450393fc5d40827a7e9b2bf5c0045`.
+
+- Gemini job: `gemini-3.5-flash-lite` returned `DAILY_NEWS_OK`.
+- All 15 offline tests passed.
+- RSS job: 4/4 feeds, 47 approved unique articles.
+
+This confirms that the current key and project can call Flash-Lite. The result
+suggests the repeated 503 failures were specific to the other model's serving
+path; it does not establish the exact root cause of those errors or the earlier
+403. News analysis and independent-source corroboration are not implemented yet.
