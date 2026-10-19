@@ -6,7 +6,7 @@ from news_fetcher import approved_publisher, parse_rss
 class PublisherFilterTests(unittest.TestCase):
     def test_approved_domains(self):
         self.assertEqual(approved_publisher("https://www.reuters.com"), "Reuters")
-        self.assertEqual(approved_publisher("https://feeds.bbci.co.uk/news"), "BBC News")
+        self.assertEqual(approved_publisher("https://feeds.bbc.co.uk/news"), "BBC News")
         self.assertEqual(approved_publisher("https://apnews.com"), "Associated Press")
 
     def test_unapproved_and_spoofed_domains(self):

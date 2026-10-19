@@ -26,5 +26,27 @@ jobs:
       - name: Test publisher allowlist (offline)
         run: python -m unittest -v test_news_fetcher.py
 
+      - name: Test Gemini error handling (offline)
+        run: python -m unittest -v test_news_analyzer.py
+
       - name: Fetch Google News headlines
         run: python news_fetcher.py
+
+  gemini:
+    name: Test Gemini connection
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+
+    steps:
+      - name: Download repository code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Make one Gemini test call
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python news_analyzer.py
