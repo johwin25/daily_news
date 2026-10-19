@@ -48,7 +48,8 @@ a 1,024-token output cap (including thinking), low thinking, and no automatic
 retries or search tools. The request sends only a fixed connection-test prompt.
 The job receives the secret as an environment variable; the key is sent in an
 HTTPS header, not the URL. Raw provider responses and exception details are not
-printed. Saving a secret alone does not prove that the key works; only a live
+printed. Recognized Google error reasons are translated into fixed diagnostics;
+provider messages, project IDs, and metadata remain hidden. Saving a secret alone does not prove that the key works; only a live
 successful run establishes connectivity.
 
 ## Troubleshooting
@@ -57,7 +58,7 @@ successful run establishes connectivity.
 | --- | --- |
 | Missing GEMINI_API_KEY | Use a repository Actions secret with that exact name. |
 | HTTP 400 | Check key validity and the model request configuration. |
-| HTTP 401/403 | Check key validity, permissions, restrictions, and account eligibility. |
+| HTTP 401/403 | Read the new Google reason/status line; check the specific permission or restriction it identifies. |
 | HTTP 404 | Check whether this model is available to your project. |
 | HTTP 429 | Check AI Studio quota and wait for reset; do not enable paid billing automatically. |
 | HTTP 5xx or network/timeout error | Check service availability and retry manually later. |
@@ -65,3 +66,19 @@ successful run establishes connectivity.
 
 Even a successful connection test does not establish news accuracy. The RSS
 allowlist is publisher filtering, not independent fact verification.
+
+## Diagnosing a refused Gemini request
+
+The October 19 live run confirmed successful RSS collection (4/4 feeds, 48 approved
+unique articles) and all 12 then-existing offline tests. The Gemini job received
+a nonempty secret but returned HTTP 403. The original logger discarded the
+provider's error body, so that run does not identify the specific cause.
+
+The improved logger reads a bounded error body and prints only recognized, fixed
+diagnostics such as SERVICE_DISABLED, API_KEY_SERVICE_BLOCKED, or
+API_KEY_HTTP_REFERRER_BLOCKED. Unknown details are not echoed. A generic 403 does
+not establish which setting is wrong and does not prove the supplied key is valid.
+
+To use the updated diagnostics, start a **new** manual run on
+`fix/bbc-allowlist-test`. Re-running jobs in the old run uses its original commit
+and will not use the new logging code. Share the new run URL for diagnosis.
