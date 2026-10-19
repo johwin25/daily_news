@@ -119,5 +119,51 @@ class GeminiConnectionTests(unittest.TestCase):
         self.assertEqual(result, 1)
 
 
+    def test_recognized_google_reason_is_logged_without_private_metadata(self):
+        for reason in ("SERVICE_DISABLED", "API_KEY_SERVICE_BLOCKED",
+                       "API_KEY_HTTP_REFERRER_BLOCKED", "API_KEY_IP_ADDRESS_BLOCKED"):
+            with self.subTest(reason=reason):
+                payload = {"error": {
+                    "status": "PERMISSION_DENIED",
+                    "message": FAKE_KEY,
+                    "details": [{"reason": reason, "metadata": {"api_key": FAKE_KEY}}],
+                }}
+                error = HTTPError(analyzer.ENDPOINT, 403, FAKE_KEY, {},
+                                  io.BytesIO(json.dumps(payload).encode()))
+                with patch("news_analyzer.urlopen", side_effect=error):
+                    self.assertEqual(analyzer.main(), 1)
+                self.assertIn(f"Google reason: {reason}", self.err.getvalue())
+        self.assertNotIn(FAKE_KEY, self.out.getvalue() + self.err.getvalue())
+
+    def test_unrecognized_reasons_and_malformed_details_are_not_echoed(self):
+        payloads = [
+            {"error": {"status": FAKE_KEY, "details": [{"reason": FAKE_KEY}]}},
+            {"error": {"status": "PERMISSION_DENIED", "details": [{"reason": [FAKE_KEY]}]}},
+            {"error": {"details": None}},
+            {"error": None},
+        ]
+        raw_bodies = [json.dumps(payload).encode() for payload in payloads]
+        raw_bodies.extend([b"not-json", b"x" * 16_385])
+        for raw in raw_bodies:
+            with self.subTest(size=len(raw)):
+                error = HTTPError(analyzer.ENDPOINT, 403, FAKE_KEY, {}, io.BytesIO(raw))
+                with patch("news_analyzer.urlopen", side_effect=error):
+                    self.assertEqual(analyzer.main(), 1)
+        self.assertNotIn(FAKE_KEY, self.out.getvalue() + self.err.getvalue())
+
+    def test_google_message_is_classified_without_echoing(self):
+        for message, reason in (
+            (f"Your API key was reported as leaked. {FAKE_KEY}", "KEY_REPORTED_LEAKED"),
+            (f"API key not valid. {FAKE_KEY}", "API_KEY_INVALID"),
+            (f"API has not been used in project {FAKE_KEY}", "SERVICE_DISABLED"),
+        ):
+            error = HTTPError(analyzer.ENDPOINT, 403, FAKE_KEY, {},
+                              io.BytesIO(json.dumps({"error": {"message": message}}).encode()))
+            with patch("news_analyzer.urlopen", side_effect=error):
+                self.assertEqual(analyzer.main(), 1)
+            self.assertIn(f"Google reason: {reason}", self.err.getvalue())
+        self.assertNotIn(FAKE_KEY, self.out.getvalue() + self.err.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()
