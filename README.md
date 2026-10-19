@@ -18,7 +18,7 @@ In this repository, go to Settings -> Secrets and variables -> Actions -> Secret
 then add a repository secret named `GEMINI_API_KEY`. Never put its value in code,
 commits, screenshots, or logs.
 
-The connection check uses `gemini-3.8-flash`. Google's
+The connection check uses `gemini-3.5-flash-lite`. Google's
 [pricing page](https://ai.google.dev/gemini-api/docs/pricing) lists free-tier text
 input/output as of October 19, 2026; project eligibility and quotas must be checked
 in AI Studio. Keep billing disabled for this free prototype. The script never
@@ -82,3 +82,19 @@ not establish which setting is wrong and does not prove the supplied key is vali
 To use the updated diagnostics, start a **new** manual run on
 `fix/bbc-allowlist-test`. Re-running jobs in the old run uses its original commit
 and will not use the new logging code. Share the new run URL for diagnosis.
+
+## Alternate-model connectivity diagnostic
+
+Repeated live requests to `gemini-3.8-flash` returned HTTP 503 / UNAVAILABLE,
+including the retry at 14:27 UTC on October 19, 2026. The connection check now
+targets `gemini-3.5-flash-lite`, whose text input/output is listed on the free tier
+in Google's pricing documentation checked that day.
+
+Only the model identifier changed in Python. The key, prompt, endpoint method,
+low thinking setting, token cap, and output validation are unchanged. All 15
+offline tests pass with this model identifier; a live Flash-Lite run is pending.
+Start a new manual workflow on the branch above to test it. Its opening log must
+name `gemini-3.5-flash-lite`; an old run still names `gemini-3.8-flash`.
+A successful response would establish connectivity to Flash-Lite and suggest the
+earlier failures were specific to the other model's serving path. A failure alone
+does not establish a key or project misconfiguration.
