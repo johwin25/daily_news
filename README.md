@@ -174,9 +174,21 @@ model output fail the run and preserve diagnostic artifacts. Follow-up search
 failures remain visible and cannot promote a draft into confirmed news. Reruns
 replace the dated files and remove stale reports before starting.
 
-Next acceptance checkpoint: inspect one live research run, its source mappings,
-headline excerpts, grouping, priorities, summaries and exclusion reasons before
-adding full-text corroboration, a daily schedule, or phone delivery.
+Live research validation completed on October 19, 2026:
+[successful run](https://github.com/johwin25/daily_news/actions/runs/39272735943),
+code commit `a15f2e3407465e0281c2c0ce06516741ecd44bf3`.
+All 45 offline tests passed in Actions. The live pipeline collected 48 candidates,
+shortlisted five events, completed five follow-up searches without failures,
+and retained 52 source records. It produced three unverified draft leads and
+zero confirmed stories. Both structured Gemini calls succeeded. Saved source
+mappings and exact headline excerpts passed local revalidation; regenerating
+the JSON briefing and text report from the artifact reproduced both exactly.
+These checks establish pipeline execution and citation integrity, not factual
+accuracy or reporting independence.
+
+Next implementation stage: retrieve full-article or primary evidence and establish
+reporting provenance before enabling confirmed stories, daily scheduling, or
+phone delivery.
 
 Provider decoding schemas retain types, keys and enums but omit nested array
 and text length limits to reduce decoder complexity. Full array and text bounds
