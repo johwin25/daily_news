@@ -96,10 +96,15 @@ def validate_contract(value, schema):
 
 
 def provider_schema(schema):
-    """Keep the provider's documented schema subset; check text limits locally."""
+    """Keep the decoding schema small; enforce all size bounds locally.
+
+    Nested bounded arrays can multiply the provider's decoder state space.
+    Types, required keys and enums remain in the request; lengths and counts
+    are checked by validate_contract after decoding.
+    """
     result = {}
     for key, value in schema.items():
-        if key in ("minLength", "maxLength"):
+        if key in ("minLength", "maxLength", "minItems", "maxItems"):
             continue
         if key == "properties":
             result[key] = {}

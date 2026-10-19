@@ -153,7 +153,7 @@ Open the run's **Summary** to read the report. Download the
 | `briefing.json` | Evidence-gate decision and up to three draft review leads |
 | `briefing.txt` | Readable report with collected links and retrieved headlines |
 | `run_status.json` | Operational outcome or fixed failure diagnostic |
-| `contracts.json` | Output contracts used for model validation |
+| `contracts.json` | Output contracts used for local model validation |
 
 A successful run prints `PASS: research pipeline completed` and records
 `completed_with_evidence_shortfall`. This means execution succeeded, while
@@ -177,3 +177,7 @@ replace the dated files and remove stale reports before starting.
 Next acceptance checkpoint: inspect one live research run, its source mappings,
 headline excerpts, grouping, priorities, summaries and exclusion reasons before
 adding full-text corroboration, a daily schedule, or phone delivery.
+
+Provider decoding schemas retain types, keys and enums but omit nested array
+and text length limits to reduce decoder complexity. Full array and text bounds
+remain enforced locally after each response.

@@ -9,7 +9,10 @@ from urllib.error import HTTPError
 
 from news_analyzer import GeminiConnectionError
 from news_collector import normalize_article
-from news_contracts import ContractError, SHORTLIST_SCHEMA, validate_contract
+from news_contracts import (
+    ASSESSMENT_SCHEMA, ContractError, SHORTLIST_SCHEMA, provider_schema,
+    validate_contract,
+)
 from news_editor import call_model, validate_assessment, validate_shortlist
 from test_news_collector import NOW, article
 
@@ -58,6 +61,17 @@ def assessment(rows=None):
 
 
 class EditorContractTests(unittest.TestCase):
+    def test_provider_schema_stays_small_but_local_array_limits_still_apply(self):
+        schema = provider_schema(ASSESSMENT_SCHEMA)
+        encoded = json.dumps(schema)
+        for keyword in ("maxItems", "minItems", "maxLength", "minLength"):
+            self.assertNotIn(keyword, encoded)
+        self.assertIn('"required"', encoded)
+        value = assessment()
+        value["events"][0]["claims"] *= 5
+        with self.assertRaises(ContractError):
+            validate_contract(value, ASSESSMENT_SCHEMA)
+
     def test_invented_citations_are_rejected(self):
         value = shortlist()
         value["events"][0]["source_ids"] = ["src_invented"]
