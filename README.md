@@ -7,7 +7,12 @@ Personal daily top-three global news briefing project.
 - Google News RSS collection for World, Economy, Technology, and Science.
 - Ten-publisher domain allowlist and offline parser tests.
 - Stage 3A complete: a live-verified, manually triggered Gemini connection check.
-- News ranking, independent-source corroboration, daily scheduling, and iPhone delivery are still to be built.
+- Stage 3B: normalized dated source records, two structured Gemini calls for
+  event shortlisting and claim comparison, and targeted follow-up RSS searches.
+- Dated JSON records and a readable review report saved as Actions artifacts.
+- Strict evidence gate: headline-only evidence produces unverified draft leads,
+  with zero confirmed stories. Full-text evidence, reporting independence,
+  daily scheduling, and iPhone delivery remain to be built.
 
 ## Requirements and secret
 
@@ -29,12 +34,11 @@ enables billing or switches models automatically.
 Offline tests need neither a key nor network access:
 
 ```sh
-python -m unittest -v test_news_fetcher.py test_news_analyzer.py
+python -m unittest discover -v
 ```
 
 For the live check, use Actions -> Test Daily News -> Run workflow.
-Select the branch containing this change (currently `fix/bbc-allowlist-test`;
-use `main` after merging), then click Run workflow.
+Select `main`, then click Run workflow.
 
 Open the new run and choose the **Test Gemini connection** job. Its expected log is:
 
@@ -105,4 +109,87 @@ code commit `16d3e3cf689450393fc5d40827a7e9b2bf5c0045`.
 This confirms that the current key and project can call Flash-Lite. The result
 suggests the repeated 503 failures were specific to the other model's serving
 path; it does not establish the exact root cause of those errors or the earlier
-403. News analysis and independent-source corroboration are not implemented yet.
+403. Structured headline analysis is now implemented on `feat/evidence-pipeline`;
+independent-source corroboration remains incomplete.
+
+## Run the research pipeline
+
+The separate **Daily News Research** workflow runs offline tests before collecting
+four topic feeds and making at most two calls to the working Flash-Lite model.
+It runs on same-repository pull requests and by manual dispatch. Fork PRs run
+only offline tests. It has read-only repository permissions and no schedule.
+
+A manual local run (with the key already in the environment) is:
+
+```sh
+python news_pipeline.py
+```
+
+The workflow supplies `GEMINI_API_KEY` only to the pipeline step. It does not
+print the key or save raw provider responses. Each model request is limited to
+60 seconds, 100,000 input bytes, 200,000 response bytes and 8,192 output tokens,
+with no retries, model switching, grounding tools, or billing changes. Quota
+exhaustion stops the run; eligibility and billing settings remain account-side.
+
+Collection accepts articles from the publisher allowlist with valid timestamps
+within 48 hours (up to 15 minutes of clock skew). It caps candidates at 25 per
+category and 100 overall, merges duplicate URLs across categories, and retains
+source URLs and provenance under stable IDs. Gemini shortlists up to five
+events. Each event receives one follow-up RSS search, retaining at most eight
+fresh results. The second call compares discrete claims using source IDs and
+exact excerpts from their headlines. Local checks reject invented IDs, invented
+quotes, wrong-event citations, invalid JSON, and truncated responses.
+
+Open the run's **Summary** to read the report. Download the
+`daily-news-research-<run>-<attempt>` artifact for files under `output/YYYY-MM-DD/`
+(UTC, retained for 14 days):
+
+| File | Purpose |
+| --- | --- |
+| `candidates.json` | Normalized source registry, exclusions and feed failures |
+| `shortlist.json` | Unverified model event grouping and editorial priorities |
+| `evidence.json` | Follow-up source records, event mappings and search failures |
+| `assessment.json` | Unverified model claim comparisons and headline excerpts |
+| `briefing.json` | Evidence-gate decision and up to three draft review leads |
+| `briefing.txt` | Readable report with collected links and retrieved headlines |
+| `run_status.json` | Operational outcome or fixed failure diagnostic |
+| `contracts.json` | Output contracts used for local model validation |
+
+A successful run prints `PASS: research pipeline completed` and records
+`completed_with_evidence_shortfall`. This means execution succeeded, while
+`confirmed_count` remains zero and `items` is empty. Drafts appear only in
+`review_queue`, with `insufficient_evidence` status. Editorial priority measures
+importance, not probability of truth. An empty shortlist is valid; no stories
+are invented to fill the requested three slots.
+
+Different publishers may repeat the same wire report. Matching headlines are
+flagged, but different wording does not establish independence. The retrieved
+links may be Google News redirects, not resolved publisher article URLs.
+Full-text retrieval and reporting provenance must be implemented before this
+pipeline can produce confirmed stories. The report does not claim to have read
+articles it has not retrieved.
+
+Partial initial collection, no fresh candidates, provider failures, or invalid
+model output fail the run and preserve diagnostic artifacts. Follow-up search
+failures remain visible and cannot promote a draft into confirmed news. Reruns
+replace the dated files and remove stale reports before starting.
+
+Live research validation completed on October 19, 2026:
+[successful run](https://github.com/johwin25/daily_news/actions/runs/39272735943),
+code commit `a15f2e3407465e0281c2c0ce06516741ecd44bf3`.
+All 45 offline tests passed in Actions. The live pipeline collected 48 candidates,
+shortlisted five events, completed five follow-up searches without failures,
+and retained 52 source records. It produced three unverified draft leads and
+zero confirmed stories. Both structured Gemini calls succeeded. Saved source
+mappings and exact headline excerpts passed local revalidation; regenerating
+the JSON briefing and text report from the artifact reproduced both exactly.
+These checks establish pipeline execution and citation integrity, not factual
+accuracy or reporting independence.
+
+Next implementation stage: retrieve full-article or primary evidence and establish
+reporting provenance before enabling confirmed stories, daily scheduling, or
+phone delivery.
+
+Provider decoding schemas retain types, keys and enums but omit nested array
+and text length limits to reduce decoder complexity. Full array and text bounds
+remain enforced locally after each response.

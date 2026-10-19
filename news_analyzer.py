@@ -35,6 +35,7 @@ HTTP_REASON_HINTS = {
     "CONSUMER_INVALID": "Check the Google Cloud project associated with this key.",
     "BILLING_DISABLED": "Check free-tier project eligibility; do not enable paid billing automatically.",
     "KEY_REPORTED_LEAKED": "Google reports this key as leaked; create a replacement and update the GitHub secret.",
+    "SCHEMA_TOO_COMPLEX": "Simplify provider schema constraints; retain local output validation.",
 }
 
 
@@ -64,6 +65,9 @@ def safe_http_detail(error):
                 ("api key expired", "API_KEY_EXPIRED"),
                 ("has not been used in project", "SERVICE_DISABLED"),
                 ("requests from referer", "API_KEY_HTTP_REFERRER_BLOCKED"),
+                ("too many states", "SCHEMA_TOO_COMPLEX"),
+                ("too complex", "SCHEMA_TOO_COMPLEX"),
+                ("too many constraints", "SCHEMA_TOO_COMPLEX"),
             ):
                 if phrase in message.lower():
                     return f"Google reason: {reason}. {HTTP_REASON_HINTS[reason]}"
