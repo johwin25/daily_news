@@ -6,7 +6,7 @@ from http.client import HTTPException
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-MODEL = "gemini-3.8-flash"
+MODEL = "gemini-3.5-flash-lite"
 ENDPOINT = (
     f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}"
     ":generateContent"
