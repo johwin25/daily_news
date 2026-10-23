@@ -1,0 +1,39 @@
+name: Test BBC Article Reader
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'news_article_reader.py'
+      - 'test_news_article_reader.py'
+      - '.github/workflows/article-reader.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  reader:
+    name: Test BBC text retrieval
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check extraction and failure handling offline
+        run: python -m unittest -v test_news_article_reader.py
+      - name: Read the sample BBC article
+        if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+        run: python news_article_reader.py https://www.bbc.com/news/articles/cq0ld9g9e913o
+      - name: Save article text or failure diagnostic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bbc-article-reader-${{ github.run_id }}-${{ github.run_attempt }}
+          path: output/article-reader/latest.json
+          if-no-files-found: ignore
+          retention-days: 3
