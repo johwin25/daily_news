@@ -53,17 +53,21 @@ def page_metadata(html):
     for document in parser.documents:
         walk(document)
     if not articles:
-        return {"authors": [], "published_at": None, "accessible_for_free": None}
+        return {"authors": [], "person_authors": [], "published_at": None, "accessible_for_free": None}
     article = articles[0]
     authors = article.get("author", [])
     if not isinstance(authors, list):
         authors = [authors]
     names = []
+    persons = []
     for author in authors:
         name = author.get("name", "") if isinstance(author, dict) else author
         if isinstance(name, str) and 1 <= len(name.strip()) <= 160:
             names.append(name.strip())
-    return {"authors": sorted(set(names)), "published_at": article.get("datePublished"),
+            if isinstance(author, dict) and author.get("@type") == "Person":
+                persons.append(name.strip())
+    return {"authors": sorted(set(names)), "person_authors": sorted(set(persons)),
+            "published_at": article.get("datePublished"),
             "accessible_for_free": article.get("isAccessibleForFree")}
 
 
@@ -76,7 +80,7 @@ def reporting_provenance(article, publisher, now):
     """
     metadata = article.get("metadata", {})
     authors = metadata.get("authors", [])
-    named = [name for name in authors if len(name.split()) >= 2
+    named = [name for name in metadata.get("person_authors", []) if len(name.split()) >= 2
              and name.casefold() not in {"bbc news", "the guardian", "guardian staff"}]
     fresh = False
     published = metadata.get("published_at")

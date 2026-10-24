@@ -9,7 +9,7 @@ from test_news_collector import NOW
 class GuardianTests(unittest.TestCase):
     def html(self, free=True):
         metadata = {"@type": "NewsArticle", "datePublished": NOW.isoformat(),
-                    "author": [{"name": "Jane Reporter"}], "isAccessibleForFree": free}
+                    "author": [{"@type": "Person", "name": "Jane Reporter"}], "isAccessibleForFree": free}
         return ('<meta property="og:title" content="Synthetic news">'
                 '<script type="application/ld+json">' + json.dumps(metadata)
                 + '</script><nav><p>HIDDEN NAV</p></nav><article><p>A witness told the Guardian what happened. '
@@ -39,6 +39,14 @@ class GuardianTests(unittest.TestCase):
         metadata = page_metadata(self.html())
         result = reporting_provenance({"text": "Officials issued a press release.", "metadata": metadata},
                                       "The Guardian", NOW)
+        self.assertEqual(result["origin"], "unknown")
+
+    def test_organization_byline_is_not_promoted_to_a_named_journalist(self):
+        html = self.html().replace('"@type": "Person"', '"@type": "Organization"')
+        metadata = page_metadata(html)
+        result = reporting_provenance({"text": "A witness told the Guardian what happened.",
+                                       "metadata": metadata}, "The Guardian", NOW)
+        self.assertEqual(metadata["person_authors"], [])
         self.assertEqual(result["origin"], "unknown")
 
     def test_wire_mentions_override_original_reporting_signal(self):

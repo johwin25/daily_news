@@ -174,7 +174,7 @@ def build_briefing(shortlist, assessment, evidence, now):
         "shortfall_reason": (
             "Fewer than three events passed claim-level checks for two attributed reporting chains. "
             "Held drafts remain unverified."
-        ),
+        ) if len(items) < 3 else "",
         "items": items,
         "corroboration_decisions": decisions,
         "review_queue": review_queue,

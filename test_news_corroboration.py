@@ -26,6 +26,7 @@ def corroborated_fixture():
             "retrieved_url": "https://www.theguardian.com/science/2026/oct/19/sample" if index == 0
                              else "https://www.bbc.com/news/articles/abcdefgh1234",
             "metadata": {"authors": ["Guardian Reporter" if index == 0 else "BBC Journalist"],
+                         "person_authors": ["Guardian Reporter" if index == 0 else "BBC Journalist"],
                          "published_at": NOW.isoformat()},
         }
     proposal = assessment(rows)
