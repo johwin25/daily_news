@@ -200,8 +200,9 @@ remain enforced locally after each response.
 
 The standalone BBC reader retrieves visible article text from direct HTTPS
 `bbc.com/news/articles/...` or `bbc.co.uk/news/articles/...` links. It does not
-resolve Google News links or feed this text to Gemini yet. The existing research
-pipeline still reads headlines and publishes zero confirmed stories.
+resolve Google News links itself. The integrated pipeline described below uses
+publisher feeds to resolve BBC originals and supplies their text to Gemini.
+Confirmed stories remain zero while independence is unestablished.
 
 ```sh
 python news_article_reader.py https://www.bbc.com/news/articles/cq0ld9g9e913o
@@ -261,3 +262,35 @@ The report displays original article links and the exact cited excerpts.
 Wire-service mentions and matching article text are warning signals; neither
 absence of a wire mention nor distinct publishers proves independence. Confirmed
 items remain empty until the remaining corroboration requirements are met.
+
+BBC UK feed URLs retain their original link in `feed_article_url`; the integration
+requests the international `www.bbc.com` edition at the same article path because
+the standalone extractor targets that layout. Small page-title edits are allowed
+only after that path is established, with conservative title similarity checks
+that reject changed numeric tokens or negation. Missing matches are not guessed.
+
+The **Test BBC Evidence Integration** workflow independently exercises one current
+BBC article and one Gemini comparison request, ensuring the text path is tested
+even when editorial ranking selects no BBC stories. It retains its evidence,
+assessment and fixed status under `output/article-evidence-check/` for three days.
+This is a functional test, not a ranked or independently verified news item.
+
+Live validation on October 24, 2026, tested code commit
+`1a7f8ff7445339c7aa02a3252edadea1c0ec0560`:
+
+- All 69 offline tests passed locally and in Actions.
+- [Focused integration run](https://github.com/johwin25/daily_news/actions/runs/40056472579)
+  retrieved 1,915 characters from a current BBC article. Gemini returned two
+  article-text citations, both validated against the retained text. Downloaded
+  artifact review also checked the stored text hash.
+- [Research run](https://github.com/johwin25/daily_news/actions/runs/40056472630)
+  processed 47 candidates and produced three unverified draft leads. No BBC
+  sources were assigned to that run's selected events, so it made zero article
+  reads. All source citations were revalidated, and its JSON briefing and text
+  report were reproduced exactly from saved evidence.
+- Both workflows passed. Confirmed stories remain zero: article completeness,
+  article-page publication dates and independent reporting are still unestablished.
+
+These results establish the BBC text-to-model path and citation integrity. They
+do not establish factual accuracy or independent corroboration. Article readers
+for additional publishers and reporting-provenance checks are still required.
