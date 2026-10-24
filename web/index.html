@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#ffffff">
+<title>Daily News | Briefing</title>
+<style>
+:root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#191919;background:#fff;font-synthesis:none}
+*{box-sizing:border-box}body{margin:0}header{border-bottom:1px solid #dedede;padding:18px max(20px,calc((100vw - 900px)/2))}
+.brand{font-size:27px;font-weight:850;letter-spacing:-1.5px}.brand b{color:#f27222}.eyebrow{font-size:12px;letter-spacing:1.7px;text-transform:uppercase;color:#666;font-weight:750}
+main{max-width:900px;margin:auto;padding:36px 20px 80px}h1{font-size:clamp(35px,8vw,62px);letter-spacing:-2px;margin:10px 0;line-height:1.04}h2{font-size:24px;letter-spacing:-.7px}
+.description{color:#5e5e5e;line-height:1.55}.status{display:inline-block;background:#f6f6f6;border:1px solid #dedede;border-radius:3px;padding:7px 10px;font-size:13px;font-weight:700;margin-top:12px}
+.story{border-top:1px solid #d8d8d8;padding:23px 0}.story h3{font-size:clamp(22px,5vw,30px);line-height:1.2;letter-spacing:-.7px;margin:10px 0}.story p{line-height:1.68;margin:11px 0}.tag{font-size:12px;font-weight:750;letter-spacing:1px;text-transform:uppercase;color:#a34c19}
+summary{cursor:pointer;font-weight:700;padding:10px 0}details{background:#fafafa;border-left:3px solid #e4e4e4;padding:6px 14px;margin-top:17px}
+a{color:#ad4b13;overflow-wrap:anywhere}ul{padding-left:20px}li{margin:9px 0}.notice{background:#fff7ee;border-left:4px solid #e58c40;padding:15px;line-height:1.5;margin:20px 0}
+footer{margin-top:60px;color:#777;font-size:13px;border-top:1px solid #ddd;padding-top:20px}
+</style></head>
+<body><header><div class="brand">DAILY <b>NEWS</b></div></header>
+<main>
+<div class="eyebrow">Your daily briefing</div>
+<h1>Today's stories.</h1>
+<p class="description" id="date">Checking the latest available edition…</p>
+<div id="content" role="status" aria-live="polite"></div>
+<footer>Original short briefings with publisher attribution. Always consult primary reporting for important decisions.</footer>
+</main>
+<script>
+"use strict";
+const content=document.getElementById("content");
+const dateEl=document.getElementById("date");
+const el=(name,cls,value)=>{const node=document.createElement(name);if(cls)node.className=cls;if(value!==undefined)node.textContent=String(value);return node;};
+function display(data){
+  content.replaceChildren();
+  if(!data || !Array.isArray(data.items) || !Array.isArray(data.review_queue)) throw Error("Invalid briefing structure");
+  dateEl.textContent=data.date_utc ? "Edition date (UTC): "+data.date_utc : "Edition date unavailable";
+  const confirmed=data.items.filter(x=>x && x.status==="confirmed");
+  const drafts=data.review_queue.filter(x=>x && x.status==="insufficient_evidence");
+  const summary=el("div","status",confirmed.length+" confirmed stories · "+drafts.length+" research leads");
+  content.append(summary);
+  if(data.pipeline_status==="failed") content.append(el("p","notice","The news research pipeline failed. No articles are available."));
+  else if(confirmed.length===0) content.append(el("p","notice","No stories have passed the verification gate. Research leads below are UNVERIFIED and must not be treated as confirmed news."));
+  const section=(title,items,isDraft)=>{
+    if(!items.length)return;
+    content.append(el("h2","",title));
+    items.forEach(item=>{
+      const article=el("article","story");
+      article.append(el("div","tag",isDraft?"Unverified research lead":item.category||"News"));
+      article.append(el("h3","",item.working_headline||item.headline||"Untitled story"));
+      const body=item.draft_summary||item.summary;
+      if(body)article.append(el("p","",body));
+      const why=item.why_it_matters_draft||item.why_it_matters;
+      if(why)article.append(el("p","", "Why it matters: "+why));
+      if(isDraft)article.append(el("p","description","Status: insufficient evidence. This AI-generated draft is not independently verified."));
+      const sources=Array.isArray(item.sources)?item.sources:[];
+      if(sources.length){
+        const details=el("details"),heading=el("summary","","Sources ("+sources.length+")"),list=el("ul");
+        sources.forEach(source=>{
+          const li=el("li"),publisher=el("span","",source.publisher||"Source");
+          li.append(publisher);
+          const url=source.article?.retrieved_url ||source.url;
+          try{
+            const parsed=new URL(url);
+            if(parsed.protocol==="https:"||parsed.protocol==="http:"){
+              li.append(document.createTextNode(" — "));
+              const link=el("a","",source.title||"Read source");
+              link.href=parsed.href;link.target="_blank";link.rel="noopener noreferrer";
+              li.append(link);
+            }
+          }catch{}
+          list.append(li);
+        });
+        details.append(heading,list);article.append(details);
+      }
+      content.append(article);
+    });
+  };
+  section("Confirmed stories",confirmed,false);
+  section("Research leads — unverified",drafts,true);
+  if(!confirmed.length&&!drafts.length)content.append(el("p","description","No stories are available in this edition."));
+}
+fetch("./briefing.json",{cache:"no-store"}).then(r=>{if(!r.ok)throw Error("Briefing unavailable");return r.json()}).then(display).catch(()=>{dateEl.textContent="Edition unavailable";content.replaceChildren(el("p","notice","The briefing could not be loaded. Please try again later."));});
+</script></body></html>
