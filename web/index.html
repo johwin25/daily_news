@@ -26,7 +26,7 @@ footer{margin-top:60px;color:#777;font-size:13px;border-top:1px solid #ddd;paddi
 <p class="description" id="date">Checking the latest available edition…</p>
 <div id="content" role="status" aria-live="polite"></div>
 <footer>Original short briefings with publisher attribution. Always consult primary reporting for important decisions.</footer>
-</main>
+<section aria-label="Notifications" class="story"><h2>Phone notifications</h2><p class="description">Opt in to alerts when new research briefings are published.</p><button id="notification-toggle" type="button">Enable notifications</button><p id="push-status" class="description" role="status"></p></section></main>
 <script>
 "use strict";
 const content=document.getElementById("content");
@@ -135,4 +135,4 @@ function display(data){
 }
 fetch("./briefing.json",{cache:"no-store"}).then(r=>{if(!r.ok)throw Error("Briefing unavailable");return r.json()}).then(display).catch(()=>{dateEl.textContent="Edition unavailable";content.replaceChildren(el("p","notice","The briefing could not be loaded. Please try again later."));});
 if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));
-</script></body></html>
+</script><script src="./push-config.js"></script><script src="./push.js" defer></script></body></html>
