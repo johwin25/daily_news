@@ -12,7 +12,7 @@ webpush.setVapidDetails(process.env.VAPID_SUBJECT,process.env.VAPID_PUBLIC_KEY,p
  let delivered=0,expired=0,failed=0;
  for(const sub of data.subscriptions){
    try{
-     await webpush.sendNotification(sub,JSON.stringify({title:"Daily News",body:"Today's research briefing is ready.",url:"https://johwin25.github.io/daily_news/"}),{TTL:3600});
+     await webpush.sendNotification(sub,JSON.stringify({title:"Your morning, in focus.",body:"A fresh look at what matters today.",url:"https://johwin25.github.io/daily_news/"}),{TTL:3600});
      delivered++;
    }catch(e){
      if([404,410].includes(e.statusCode)){
