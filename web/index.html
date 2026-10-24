@@ -15,7 +15,7 @@
 main{max-width:900px;margin:auto;padding:36px 20px 80px}h1{font-size:clamp(35px,8vw,62px);letter-spacing:-2px;margin:10px 0;line-height:1.04}h2{font-size:24px;letter-spacing:-.7px}
 .description{color:#5e5e5e;line-height:1.55}.status{display:inline-block;background:#f6f6f6;border:1px solid #dedede;border-radius:3px;padding:7px 10px;font-size:13px;font-weight:700;margin-top:12px}
 .story{border-top:1px solid #d8d8d8;padding:23px 0}.story h3{font-size:clamp(22px,5vw,30px);line-height:1.2;letter-spacing:-.7px;margin:10px 0}.story p{line-height:1.68;margin:11px 0}.tag{font-size:12px;font-weight:750;letter-spacing:1px;text-transform:uppercase;color:#a34c19}
-.lead-image{width:100%;aspect-ratio:16/9;object-fit:cover;display:block;background:#f3f3f3;margin:15px 0 5px;border-radius:3px}.photo-caption{font-size:11px!important;line-height:1.45!important;color:#757575;margin:5px 0 15px!important}.more-story{border-top:1px solid #dedede;padding:15px 0}.more-story a{color:#1b1b1b;font-weight:750;text-decoration:none;font-size:clamp(18px,4vw,22px);line-height:1.35}.more-story a:hover{text-decoration:underline}.more-story .tag{margin-bottom:6px}.more-source{color:#777;font-size:12px;margin-top:6px}summary{cursor:pointer;font-weight:700;padding:10px 0}details{background:#fafafa;border-left:3px solid #e4e4e4;padding:6px 14px;margin-top:17px}
+.photo-frame{position:relative;min-height:170px;background:#e9eef1;border-radius:3px;overflow:hidden}.photo-fallback{position:absolute;inset:0;display:grid;place-items:center;color:#52616b;font-weight:700;z-index:0}.photo-fallback[hidden]{display:none}.lead-image{position:relative;z-index:1;width:100%;aspect-ratio:16/9;object-fit:cover;display:block;background:transparent;margin:0;border-radius:3px}.photo-caption{font-size:11px!important;line-height:1.45!important;color:#757575;margin:5px 0 15px!important}.more-story{border-top:1px solid #dedede;padding:15px 0}.more-story a{color:#1b1b1b;font-weight:750;text-decoration:none;font-size:clamp(18px,4vw,22px);line-height:1.35}.more-story a:hover{text-decoration:underline}.more-story .tag{margin-bottom:6px}.more-source{color:#777;font-size:12px;margin-top:6px}summary{cursor:pointer;font-weight:700;padding:10px 0}details{background:#fafafa;border-left:3px solid #e4e4e4;padding:6px 14px;margin-top:17px}
 a{color:#ad4b13;overflow-wrap:anywhere}ul{padding-left:20px}li{margin:9px 0}.notice{background:#fff7ee;border-left:4px solid #e58c40;padding:15px;line-height:1.5;margin:20px 0}
 footer{margin-top:60px;color:#777;font-size:13px;border-top:1px solid #ddd;padding-top:20px}
 </style></head>
@@ -32,29 +32,42 @@ footer{margin-top:60px;color:#777;font-size:13px;border-top:1px solid #ddd;paddi
 const content=document.getElementById("content");
 const dateEl=document.getElementById("date");
 const el=(name,cls,value)=>{const node=document.createElement(name);if(cls)node.className=cls;if(value!==undefined)node.textContent=String(value);return node;};
-// Commons illustration lookup: require lexical headline relevance, otherwise omit photo.
-function addIllustration(article,headline){
- const tokens=new Set((headline.toLowerCase().match(/[a-z]{4,}/g)||[]).filter(w=>!["after","amid","about","could","would","their","these","those","world","today","report","news","says","said"].includes(w)));
- const query=[...tokens].slice(0,7).join(" ");
- if(tokens.size<2||!query)return;
- const params=new URLSearchParams({action:"query",generator:"search",gsrsearch:query+" filetype:bitmap",gsrnamespace:"6",gsrlimit:"8",prop:"imageinfo",iiprop:"url|mime",iiurlwidth:"900",format:"json",origin:"*"});
- fetch("https://commons.wikimedia.org/w/api.php?"+params,{signal:AbortSignal.timeout(5500)}).then(r=>r.json()).then(data=>{
-  const candidates=Object.values(data.query?.pages||{});
-  const matching=candidates.find(p=>{
-   const title=(p.title||"").toLowerCase();
-   const matches=[...tokens].filter(t=>title.includes(t));
-   const info=p.imageinfo?.[0];
-   return matches.length>=2&&info?.mime==="image/jpeg"&&info.thumburl?.startsWith("https://upload.wikimedia.org/");
+// Story-related Commons photo first, curated category photograph otherwise.
+// All images are explicitly illustrative, never presented as the original event photo.
+function addIllustration(article,headline,category){
+ const photos={
+  world:"https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1100&q=80",
+  economy:"https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=1100&q=80",
+  technology:"https://images.unsplash.com/photo-1518770660439-4636190af475?w=1100&q=80",
+  science:"https://images.unsplash.com/photo-1532094349884-543bc11b234d?w=1100&q=80"
+ };
+ const names={world:"Earth from space",economy:"Financial markets",technology:"Electronic components",science:"Scientific research"};
+ const group=(category||"").toLowerCase();
+ const key=Object.keys(photos).find(k=>group.includes(k))||"world";
+ const frame=el("div","photo-frame");
+ const img=el("img","lead-image");
+ img.alt="Illustrative category photograph: "+names[key];
+ img.loading="lazy";img.referrerPolicy="no-referrer";
+ const caption=el("p","photo-caption","Illustrative image — not a photograph of the reported event. Category: "+names[key]+". Source: Unsplash.");
+ const note=el("div","photo-fallback","Illustrative image: "+names[key]);
+ frame.append(img,note);article.querySelector("h3")?.after(frame,caption);
+ function categoryPhoto(){img.src=photos[key];img.alt="Illustrative category photograph: "+names[key];}
+ img.onload=()=>{note.hidden=true;};
+ img.onerror=()=>{if(img.dataset.fallback)return;img.dataset.fallback="1";categoryPhoto();};
+ const tokens=new Set((headline.toLowerCase().match(/[a-z]{5,}/g)||[]).filter(w=>!["after","about","could","would","their","these","those","world","today","report","news","says","said"].includes(w)));
+ if(tokens.size<2){img.dataset.fallback="1";categoryPhoto();return;}
+ const params=new URLSearchParams({action:"query",generator:"search",gsrsearch:[...tokens].slice(0,5).join(" ")+" filetype:bitmap",gsrnamespace:"6",gsrlimit:"8",prop:"imageinfo",iiprop:"url|mime",iiurlwidth:"900",format:"json",origin:"*"});
+ const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),3500);
+ fetch("https://commons.wikimedia.org/w/api.php?"+params,{signal:controller.signal}).then(r=>r.json()).then(data=>{
+  const match=Object.values(data.query?.pages||{}).find(p=>{
+   const title=(p.title||"").toLowerCase(), info=p.imageinfo?.[0];
+   return [...tokens].filter(t=>title.includes(t)).length>=2&&info?.mime==="image/jpeg"&&info.thumburl?.startsWith("https://upload.wikimedia.org/");
   });
-  if(!matching)return;
-  const info=matching.imageinfo[0], img=el("img","lead-image");
-  img.src=info.thumburl;img.alt="Related illustrative photograph: "+matching.title.replace(/^File:/,"");
-  img.loading="lazy";img.referrerPolicy="no-referrer";img.onerror=()=>{img.remove();caption.remove();};
-  const caption=el("p","photo-caption");
-  caption.append(document.createTextNode("Illustrative photo, not necessarily from the original article. Source: "));
-  const a=el("a","","Wikimedia Commons");a.href=info.descriptionurl||"https://commons.wikimedia.org/";a.target="_blank";a.rel="noopener noreferrer";caption.append(a);
-  article.querySelector("h3")?.after(img,caption);
- }).catch(()=>{}); // No irrelevant image as fallback.
+  if(!match){img.dataset.fallback="1";categoryPhoto();return;}
+  img.src=match.imageinfo[0].thumburl;
+  img.alt="Potentially related illustrative photo: "+match.title.replace(/^File:/,"");
+  caption.textContent="Illustrative image — not necessarily from the reported event. Source: Wikimedia Commons.";
+ }).catch(()=>{img.dataset.fallback="1";categoryPhoto();}).finally(()=>clearTimeout(timeout));
 }
 function display(data){
   content.replaceChildren();
@@ -74,7 +87,7 @@ function display(data){
       article.append(el("div","tag",isDraft?"Unverified research lead":item.category||"News"));
       const headline=item.working_headline||item.headline||"Untitled story";
       article.append(el("h3","",headline));
-      addIllustration(article,headline);
+      addIllustration(article,headline,item.category);
       const body=item.draft_summary||item.summary;
       if(body)article.append(el("p","",body));
       const why=item.why_it_matters_draft||item.why_it_matters;
