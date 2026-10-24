@@ -9,6 +9,7 @@ import hashlib
 import re
 import xml.etree.ElementTree as ET
 from datetime import timedelta
+from difflib import SequenceMatcher
 from email.utils import parsedate_to_datetime
 from email.utils import format_datetime
 from html import unescape
@@ -32,6 +33,29 @@ MAX_TEXT_CHARS = 5000
 def headline_key(title):
     title = re.sub(r"\s+[-|]\s+(?:BBC(?: News)?|BBC\.com)$", "", title, flags=re.I)
     return re.sub(r"[\W_]+", " ", unescape(title).casefold()).strip()
+
+
+def same_article_headline(left, right):
+    """Allow small title edits only after the exact article path is known."""
+    left, right = headline_key(left), headline_key(right)
+    if not left or not right:
+        return False
+    if left == right:
+        return True
+    if set(re.findall(r"\d+", left)) != set(re.findall(r"\d+", right)):
+        return False
+    a, b = set(left.split()), set(right.split())
+    negation = {"not", "no", "never", "denies", "denied"}
+    if a & negation != b & negation:
+        return False
+    return (len(a & b) / min(len(a), len(b)) >= 0.85
+            and SequenceMatcher(None, left, right, autojunk=False).ratio() >= 0.85)
+
+
+def international_article_url(url):
+    """BBC uses the same article ID across regional editions."""
+    validate_article_url(url)
+    return "https://www.bbc.com" + urlsplit(url).path
 
 
 class NoFeedRedirects(HTTPRedirectHandler):
@@ -72,7 +96,8 @@ def index_bbc_feeds(now, fetcher=fetch_publisher_feed):
                             or now - published > timedelta(hours=48)
                             or published - now > timedelta(minutes=15)):
                         continue
-                    value = {"url": url, "title": title, "feed_url": feed,
+                    value = {"url": international_article_url(url),
+                             "feed_article_url": url, "title": title, "feed_url": feed,
                              "published_at": published.isoformat()}
                     index.setdefault(key, {})[urlsplit(url).path] = value
                 except (ValueError, TypeError, AttributeError, OverflowError):
@@ -89,7 +114,8 @@ def resolve_bbc_record(record, index):
     # A direct URL may already exist in later source collectors.
     try:
         url = validate_article_url(record["url"])
-        return {"url": url, "basis": "direct_collected_url"}
+        return {"url": international_article_url(url), "feed_article_url": url,
+                "basis": "direct_collected_article_path"}
     except ArticleReadError:
         pass
     matches = index.get(headline_key(record["title"]), {})
@@ -134,7 +160,7 @@ def retrieve_article_evidence(shortlist, evidence, now, reader=read_article,
             original = resolve_bbc_record(record, index)
             article = reader(original["url"])
             if (article.get("status") != "retrieved"
-                    or headline_key(article.get("title", "")) != headline_key(record["title"])):
+                    or not same_article_headline(article.get("title", ""), record["title"])):
                 raise ArticleReadError("retrieved_article_title_mismatch")
             if (not isinstance(article.get("text"), str)
                     or len(article["text"].split()) < 100):
@@ -146,6 +172,7 @@ def retrieve_article_evidence(shortlist, evidence, now, reader=read_article,
             record["article"] = {
                 "source_id": source_id, "status": "retrieved",
                 "original_url": original["url"], "retrieved_url": article["retrieved_url"],
+                "feed_article_url": original.get("feed_article_url"),
                 "resolution_basis": original["basis"],
                 "publisher_feed_url": original.get("feed_url"),
                 "retrieved_at": article["retrieved_at"],
@@ -207,8 +234,8 @@ def run_live_check(output_root="output/article-evidence-check"):
         }]}
         evidence = {"records": [record], "event_sources": {"event_1": [record["id"]]},
                     "searches": [], "content_scope": "headline_only"}
-        # The direct URL is already resolved. Reuse downloaded feed bytes only
-        # by bypassing feed lookup here; production still indexes normally.
+        # Publisher feed metadata was checked above; this direct URL does not
+        # need a second index download. Production still indexes normally.
         evidence = retrieve_article_evidence(
             shortlist, evidence, now,
             feed_fetcher=lambda url: b"<rss><channel/></rss>",

@@ -8,6 +8,7 @@ from unittest.mock import Mock
 from news_article_evidence import (
     BBC_FEEDS, MAX_ARTICLES, MAX_TEXT_CHARS, headline_key, index_bbc_feeds,
     provenance_signals, resolve_bbc_record, retrieve_article_evidence,
+    same_article_headline,
 )
 from news_article_reader import ArticleReadError
 from news_contracts import ContractError
@@ -43,6 +44,24 @@ def enriched():
 
 
 class ArticleEvidenceTests(unittest.TestCase):
+    def test_minor_title_edits_are_allowed_but_numbers_and_negation_are_not(self):
+        self.assertTrue(same_article_headline(
+            "Australian MP's condition improves after alleged car attack",
+            "Australian MP Helen Haines' condition improves after alleged car attack"))
+        self.assertFalse(same_article_headline(
+            "Researchers report 10 positive results in new test",
+            "Researchers report 100 positive results in new test"))
+        self.assertFalse(same_article_headline(
+            "Researchers report positive results in new test",
+            "Researchers report no positive results in new test"))
+
+    def test_regional_feed_link_keeps_original_and_same_article_path(self):
+        index, _ = index_bbc_feeds(NOW, Mock(return_value=feed(
+            url=URL.replace("bbc.com", "bbc.co.uk"))))
+        match = next(iter(next(iter(index.values())).values()))
+        self.assertEqual(match["url"], URL)
+        self.assertEqual(match["feed_article_url"], URL.replace("bbc.com", "bbc.co.uk"))
+
     def test_google_link_resolves_by_exact_publisher_headline_and_text_is_bounded(self):
         original = bundle()
         reader = Mock(return_value=fake_article())
