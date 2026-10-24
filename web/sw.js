@@ -1,5 +1,5 @@
 /* Shell-only cache: never cache daily JSON or private research. */
-const CACHE = "daily-news-shell-v4";
+const CACHE = "daily-news-shell-v5";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon.svg", "./push.js", "./push-config.js"];
 self.addEventListener("install", event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)));
