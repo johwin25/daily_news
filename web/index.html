@@ -15,7 +15,7 @@
 main{max-width:900px;margin:auto;padding:36px 20px 80px}h1{font-size:clamp(35px,8vw,62px);letter-spacing:-2px;margin:10px 0;line-height:1.04}h2{font-size:24px;letter-spacing:-.7px}
 .description{color:#5e5e5e;line-height:1.55}.status{display:inline-block;background:#f6f6f6;border:1px solid #dedede;border-radius:3px;padding:7px 10px;font-size:13px;font-weight:700;margin-top:12px}
 .story{border-top:1px solid #d8d8d8;padding:23px 0}.story h3{font-size:clamp(22px,5vw,30px);line-height:1.2;letter-spacing:-.7px;margin:10px 0}.story p{line-height:1.68;margin:11px 0}.tag{font-size:12px;font-weight:750;letter-spacing:1px;text-transform:uppercase;color:#a34c19}
-summary{cursor:pointer;font-weight:700;padding:10px 0}details{background:#fafafa;border-left:3px solid #e4e4e4;padding:6px 14px;margin-top:17px}
+.lead-image{width:100%;aspect-ratio:16/9;object-fit:cover;display:block;background:#f3f3f3;margin:15px 0 5px;border-radius:3px}.photo-caption{font-size:11px!important;line-height:1.45!important;color:#757575;margin:5px 0 15px!important}.more-story{border-top:1px solid #dedede;padding:15px 0}.more-story a{color:#1b1b1b;font-weight:750;text-decoration:none;font-size:clamp(18px,4vw,22px);line-height:1.35}.more-story a:hover{text-decoration:underline}.more-story .tag{margin-bottom:6px}.more-source{color:#777;font-size:12px;margin-top:6px}summary{cursor:pointer;font-weight:700;padding:10px 0}details{background:#fafafa;border-left:3px solid #e4e4e4;padding:6px 14px;margin-top:17px}
 a{color:#ad4b13;overflow-wrap:anywhere}ul{padding-left:20px}li{margin:9px 0}.notice{background:#fff7ee;border-left:4px solid #e58c40;padding:15px;line-height:1.5;margin:20px 0}
 footer{margin-top:60px;color:#777;font-size:13px;border-top:1px solid #ddd;padding-top:20px}
 </style></head>
@@ -32,6 +32,30 @@ footer{margin-top:60px;color:#777;font-size:13px;border-top:1px solid #ddd;paddi
 const content=document.getElementById("content");
 const dateEl=document.getElementById("date");
 const el=(name,cls,value)=>{const node=document.createElement(name);if(cls)node.className=cls;if(value!==undefined)node.textContent=String(value);return node;};
+// Commons illustration lookup: require lexical headline relevance, otherwise omit photo.
+function addIllustration(article,headline){
+ const tokens=new Set((headline.toLowerCase().match(/[a-z]{4,}/g)||[]).filter(w=>!["after","amid","about","could","would","their","these","those","world","today","report","news","says","said"].includes(w)));
+ const query=[...tokens].slice(0,7).join(" ");
+ if(tokens.size<2||!query)return;
+ const params=new URLSearchParams({action:"query",generator:"search",gsrsearch:query+" filetype:bitmap",gsrnamespace:"6",gsrlimit:"8",prop:"imageinfo",iiprop:"url|mime",iiurlwidth:"900",format:"json",origin:"*"});
+ fetch("https://commons.wikimedia.org/w/api.php?"+params,{signal:AbortSignal.timeout(5500)}).then(r=>r.json()).then(data=>{
+  const candidates=Object.values(data.query?.pages||{});
+  const matching=candidates.find(p=>{
+   const title=(p.title||"").toLowerCase();
+   const matches=[...tokens].filter(t=>title.includes(t));
+   const info=p.imageinfo?.[0];
+   return matches.length>=2&&info?.mime==="image/jpeg"&&info.thumburl?.startsWith("https://upload.wikimedia.org/");
+  });
+  if(!matching)return;
+  const info=matching.imageinfo[0], img=el("img","lead-image");
+  img.src=info.thumburl;img.alt="Related illustrative photograph: "+matching.title.replace(/^File:/,"");
+  img.loading="lazy";img.referrerPolicy="no-referrer";img.onerror=()=>{img.remove();caption.remove();};
+  const caption=el("p","photo-caption");
+  caption.append(document.createTextNode("Illustrative photo, not necessarily from the original article. Source: "));
+  const a=el("a","","Wikimedia Commons");a.href=info.descriptionurl||"https://commons.wikimedia.org/";a.target="_blank";a.rel="noopener noreferrer";caption.append(a);
+  article.querySelector("h3")?.after(img,caption);
+ }).catch(()=>{}); // No irrelevant image as fallback.
+}
 function display(data){
   content.replaceChildren();
   if(!data || !Array.isArray(data.items) || !Array.isArray(data.review_queue)) throw Error("Invalid briefing structure");
@@ -45,10 +69,12 @@ function display(data){
   const section=(title,items,isDraft)=>{
     if(!items.length)return;
     content.append(el("h2","",title));
-    items.forEach(item=>{
+    items.slice(0,3).forEach(item=>{
       const article=el("article","story");
       article.append(el("div","tag",isDraft?"Unverified research lead":item.category||"News"));
-      article.append(el("h3","",item.working_headline||item.headline||"Untitled story"));
+      const headline=item.working_headline||item.headline||"Untitled story";
+      article.append(el("h3","",headline));
+      addIllustration(article,headline);
       const body=item.draft_summary||item.summary;
       if(body)article.append(el("p","",body));
       const why=item.why_it_matters_draft||item.why_it_matters;
@@ -79,7 +105,20 @@ function display(data){
   };
   section("Confirmed stories",confirmed,false);
   section("Research leads — unverified",drafts,true);
-  if(!confirmed.length&&!drafts.length)content.append(el("p","description","No stories are available in this edition."));
+  const others=(Array.isArray(data.additional_headlines)?data.additional_headlines:[]).slice(0,7);
+  if(others.length){
+    content.append(el("h2","","More headlines"));
+    others.forEach(item=>{
+      const article=el("article","more-story");article.append(el("div","tag",(item.category||"News")+" · Unverified headline"));
+      const link=el("a","",item.headline||"Untitled");try{
+       const u=new URL(item.url);if(u.protocol!=="https:")return;link.href=u.href;
+      }catch{return;}
+      link.target="_blank";link.rel="noopener noreferrer";article.append(link);
+      article.append(el("div","more-source",item.publisher||"Source link"));
+      content.append(article);
+    });
+  }
+  if(!confirmed.length&&!drafts.length&&!others.length)content.append(el("p","description","No stories are available in this edition."));
 }
 fetch("./briefing.json",{cache:"no-store"}).then(r=>{if(!r.ok)throw Error("Briefing unavailable");return r.json()}).then(display).catch(()=>{dateEl.textContent="Edition unavailable";content.replaceChildren(el("p","notice","The briefing could not be loaded. Please try again later."));});
 if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));
