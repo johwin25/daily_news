@@ -2,6 +2,11 @@ name: Publish Daily News Website
 
 on:
   workflow_dispatch:
+  # Deploy immediately when this workflow configuration changes.
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/mobile-edition.yml'
   schedule:
     - cron: '0 23 * * *' # 08:00 Asia/Seoul (following local day) (GitHub schedules are best-effort)
   pull_request:
