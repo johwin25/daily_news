@@ -4,11 +4,13 @@ No Google token decoding or arbitrary redirect service is used. A missing,
 ambiguous, stale or inaccessible original remains explicit missing evidence.
 """
 import copy
+import argparse
 import hashlib
 import re
 import xml.etree.ElementTree as ET
 from datetime import timedelta
 from email.utils import parsedate_to_datetime
+from email.utils import format_datetime
 from html import unescape
 from urllib.parse import urlsplit, urlunsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
@@ -171,3 +173,79 @@ def retrieve_article_evidence(shortlist, evidence, now, reader=read_article,
     }
     result["content_scope"] = "mixed_article_and_headline_evidence"
     return result
+
+
+def run_live_check(output_root="output/article-evidence-check"):
+    """Exercise one real current article and one Gemini call, without ranking."""
+    from datetime import datetime
+    from pathlib import Path
+    from news_collector import normalize_article, utc_now, write_json
+    from news_editor import compare_claims
+
+    now = utc_now()
+    folder = Path(output_root)
+    folder.mkdir(parents=True, exist_ok=True)
+    for name in ("evidence.json", "assessment.json", "status.json"):
+        (folder / name).unlink(missing_ok=True)
+    try:
+        index, diagnostics = index_bbc_feeds(now)
+        unique = [next(iter(matches.values())) for matches in index.values()
+                  if len(matches) == 1]
+        if not unique:
+            raise ArticleReadError("no_current_bbc_original_for_check")
+        chosen = unique[0]
+        record = normalize_article({
+            "title": chosen["title"], "url": chosen["url"],
+            "published": format_datetime(datetime.fromisoformat(chosen["published_at"])),
+            "publisher": "BBC News", "publisher_url": "https://www.bbc.com",
+        }, now, chosen["feed_url"], "World")
+        shortlist = {"events": [{
+            "event_id": "event_1", "working_headline": record["title"],
+            "category": "World", "priority": 0,
+            "rationale": "Single-article integration check, not editorial ranking.",
+            "source_ids": [record["id"]], "search_query": "BBC integration check",
+        }]}
+        evidence = {"records": [record], "event_sources": {"event_1": [record["id"]]},
+                    "searches": [], "content_scope": "headline_only"}
+        # The direct URL is already resolved. Reuse downloaded feed bytes only
+        # by bypassing feed lookup here; production still indexes normally.
+        evidence = retrieve_article_evidence(
+            shortlist, evidence, now,
+            feed_fetcher=lambda url: b"<rss><channel/></rss>",
+        )
+        evidence["article_retrieval"]["publisher_feeds"] = diagnostics
+        write_json(folder / "evidence.json", evidence)
+        if evidence["article_retrieval"]["retrieved_count"] != 1:
+            raise ArticleReadError("live_article_retrieval_failed")
+        assessment = compare_claims(shortlist, evidence["records"], evidence["event_sources"])
+        write_json(folder / "assessment.json", assessment)
+        count = sum(citation["scope"] == "article_text"
+                    for event in assessment["events"] for claim in event["claims"]
+                    for citation in claim["evidence"])
+        if not count:
+            raise ArticleReadError("model_did_not_cite_retrieved_article_text")
+        article = evidence["records"][0]["article"]
+        write_json(folder / "status.json", {
+            "status": "passed", "article_text_characters": len(article["text"]),
+            "validated_article_citations": count, "confirmed_count": 0,
+            "verification_status": "unverified", "check_type": "single_article_integration",
+        })
+        print(f"PASS: live article integration; {len(article['text'])} text characters, "
+              f"{count} validated article-text citations; claims remain unverified.")
+        return 0
+    except Exception as error:
+        from news_analyzer import GeminiConnectionError
+        from news_contracts import ContractError
+        reason = str(error) if isinstance(error, (ArticleReadError, GeminiConnectionError,
+                                                ContractError)) else "live_check_failure"
+        write_json(folder / "status.json", {"status": "failed", "error": reason,
+                                            "confirmed_count": 0})
+        print("FAIL: " + reason)
+        return 1
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--live-check", action="store_true", required=True)
+    parser.parse_args()
+    raise SystemExit(run_live_check())
