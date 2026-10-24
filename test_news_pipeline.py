@@ -28,6 +28,23 @@ def no_search_results(query):
 
 
 class PipelineTests(unittest.TestCase):
+    def test_article_enrichment_is_saved_compared_and_still_not_confirmed(self):
+        from test_news_article_evidence import enriched
+        evidence = enriched()
+        with tempfile.TemporaryDirectory() as folder:
+            result, args = self.run_synthetic(folder, article_enricher=Mock(return_value=evidence))
+            args["assessor"].assert_called_once_with(
+                shortlist(), evidence["records"], evidence["event_sources"])
+            self.assertEqual(result["confirmed_count"], 0)
+            self.assertEqual(result["review_queue"][0]["verification_level"], "article_text_unverified")
+            self.assertIn("article_completeness_unestablished",
+                          result["review_queue"][0]["exclusion_reasons"])
+            saved = json.loads((Path(folder) / "2026-10-19" / "evidence.json").read_text())
+            self.assertEqual(saved["article_retrieval"]["retrieved_count"], 1)
+            report = (Path(folder) / "2026-10-19" / "briefing.txt").read_text()
+            self.assertIn("Retrieved article:", report)
+            self.assertIn("Reporting independence: unknown", report)
+
     def run_synthetic(self, folder, **changes):
         args = {
             "output_root": folder, "now": NOW,
@@ -194,3 +211,4 @@ class PipelineTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

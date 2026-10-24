@@ -10,9 +10,11 @@ Personal daily top-three global news briefing project.
 - Stage 3B: normalized dated source records, two structured Gemini calls for
   event shortlisting and claim comparison, and targeted follow-up RSS searches.
 - Dated JSON records and a readable review report saved as Actions artifacts.
-- Strict evidence gate: headline-only evidence produces unverified draft leads,
-  with zero confirmed stories. Full-text evidence, reporting independence,
-  daily scheduling, and iPhone delivery remain to be built.
+- BBC article reader: live-tested extraction of visible article text.
+- BBC evidence integration resolves original links from publisher feeds, retains
+  bounded text under stable source IDs, and validates scoped model quotations.
+- Evidence remains unverified while completeness and reporting independence are
+  unknown. Daily scheduling and iPhone delivery remain to be built.
 
 ## Requirements and secret
 
@@ -137,7 +139,7 @@ category and 100 overall, merges duplicate URLs across categories, and retains
 source URLs and provenance under stable IDs. Gemini shortlists up to five
 events. Each event receives one follow-up RSS search, retaining at most eight
 fresh results. The second call compares discrete claims using source IDs and
-exact excerpts from their headlines. Local checks reject invented IDs, invented
+exact excerpts from headlines or successfully retrieved BBC article text. Local checks reject invented IDs, invented
 quotes, wrong-event citations, invalid JSON, and truncated responses.
 
 Open the run's **Summary** to read the report. Download the
@@ -198,8 +200,9 @@ remain enforced locally after each response.
 
 The standalone BBC reader retrieves visible article text from direct HTTPS
 `bbc.com/news/articles/...` or `bbc.co.uk/news/articles/...` links. It does not
-resolve Google News links or feed this text to Gemini yet. The existing research
-pipeline still reads headlines and publishes zero confirmed stories.
+resolve Google News links itself. The integrated pipeline described below uses
+publisher feeds to resolve BBC originals and supplies their text to Gemini.
+Confirmed stories remain zero while independence is unestablished.
 
 ```sh
 python news_article_reader.py https://www.bbc.com/news/articles/cq0ld9g9e913o
@@ -228,3 +231,66 @@ words. Blocked/rate-limited pages, network errors, non-HTML responses and missin
 article text return failure diagnostics with a nonzero exit code. A failed rerun
 replaces an earlier result with an empty-text failure record. BBC layout changes
 can break extraction; word counts can change as the article is updated.
+
+
+## BBC article evidence in the research pipeline
+
+The CLI now retrieves BBC text between follow-up searches and the second Gemini
+call. It indexes five fixed BBC RSS feeds, matches exact normalized headlines
+within the BBC publisher, and checks the retrieved page title again before
+attaching text to the existing source ID. Ambiguous, missing, stale or denied
+originals remain explicit unavailable evidence. Other publishers remain
+headline-only; no model-generated URL or external redirect-decoding service is
+used. Publisher feed tracking queries are removed only from validated direct
+BBC article links.
+
+The budget is six article reads per run and 5,000 retained characters per
+article. Failed reads do not fail the entire draft pipeline. `evidence.json`
+records feed availability, individual attempts, resolution basis, original and
+retrieved URLs, text hashes, truncation and wire-service mentions. Extraction
+completeness, article-page publication date and reporting independence remain
+explicitly unestablished. The original feed publication-date filters still apply.
+
+Each model citation must now include a `scope` of `headline` or `article_text`.
+Python checks quotations against the corresponding retained text. Headline-only
+records cannot be cited as article text. Only sources assigned to shortlisted
+events are sent in the second call, keeping the input bounded. New tests cover
+ambiguous originals, feed dates and hosts, changed article titles, retrieval
+budgets, text truncation, unavailable pages, quote fabrication and source scope.
+
+The report displays original article links and the exact cited excerpts.
+Wire-service mentions and matching article text are warning signals; neither
+absence of a wire mention nor distinct publishers proves independence. Confirmed
+items remain empty until the remaining corroboration requirements are met.
+
+BBC UK feed URLs retain their original link in `feed_article_url`; the integration
+requests the international `www.bbc.com` edition at the same article path because
+the standalone extractor targets that layout. Small page-title edits are allowed
+only after that path is established, with conservative title similarity checks
+that reject changed numeric tokens or negation. Missing matches are not guessed.
+
+The **Test BBC Evidence Integration** workflow independently exercises one current
+BBC article and one Gemini comparison request, ensuring the text path is tested
+even when editorial ranking selects no BBC stories. It retains its evidence,
+assessment and fixed status under `output/article-evidence-check/` for three days.
+This is a functional test, not a ranked or independently verified news item.
+
+Live validation on October 24, 2026, tested code commit
+`1a7f8ff7445339c7aa02a3252edadea1c0ec0560`:
+
+- All 69 offline tests passed locally and in Actions.
+- [Focused integration run](https://github.com/johwin25/daily_news/actions/runs/40056472579)
+  retrieved 1,915 characters from a current BBC article. Gemini returned two
+  article-text citations, both validated against the retained text. Downloaded
+  artifact review also checked the stored text hash.
+- [Research run](https://github.com/johwin25/daily_news/actions/runs/40056472630)
+  processed 47 candidates and produced three unverified draft leads. No BBC
+  sources were assigned to that run's selected events, so it made zero article
+  reads. All source citations were revalidated, and its JSON briefing and text
+  report were reproduced exactly from saved evidence.
+- Both workflows passed. Confirmed stories remain zero: article completeness,
+  article-page publication dates and independent reporting are still unestablished.
+
+These results establish the BBC text-to-model path and citation integrity. They
+do not establish factual accuracy or independent corroboration. Article readers
+for additional publishers and reporting-provenance checks are still required.

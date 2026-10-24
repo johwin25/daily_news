@@ -55,6 +55,7 @@ ASSESSMENT_SCHEMA = obj({
                 "source_id": text(40),
                 "relationship": {"type": "string",
                                  "enum": ["supports", "contradicts"]},
+                "scope": {"type": "string", "enum": ["headline", "article_text"]},
                 "quote": text(1000),
             }), 1, 8),
         }), 1, 4),
@@ -115,3 +116,4 @@ def provider_schema(schema):
         else:
             result[key] = value
     return result
+

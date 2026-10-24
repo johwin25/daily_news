@@ -53,7 +53,8 @@ def assessment(rows=None):
             "text": "SYNTHETIC: A research team publishes new material.",
             "proposed_status": "corroborated",
             "evidence": [
-                {"source_id": row["id"], "relationship": "supports", "quote": row["title"]}
+                {"source_id": row["id"], "relationship": "supports",
+                 "scope": "headline", "quote": row["title"]}
                 for row in rows
             ],
         }],
@@ -178,3 +179,4 @@ class EditorContractTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
