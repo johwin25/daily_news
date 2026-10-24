@@ -133,6 +133,8 @@ def read_article(url, opener=None):
                 raise ArticleReadError("article_response_too_large")
             html = raw.decode("utf-8")
         title, paragraphs, text = extract_article(html)
+        from news_provenance import page_metadata
+        metadata = page_metadata(html)
     except HTTPError as error:
         error.close()
         if error.code in (401, 403, 429):
@@ -147,6 +149,7 @@ def read_article(url, opener=None):
         "requested_url": url, "retrieved_url": final_url, "publisher": "BBC News",
         "retrieved_at": datetime.now(timezone.utc).isoformat(),
         "title": title, "paragraphs": paragraphs, "text": text,
+        "metadata": metadata,
         "word_count": len(text.split()), "content_scope": "article_text",
         "verification_status": "unverified",
         "limitations": ["Completeness and publication date are not established.",
@@ -185,3 +188,4 @@ def main(argv=None):
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

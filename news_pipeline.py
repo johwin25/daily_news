@@ -21,6 +21,7 @@ from news_editor import (
     compare_claims, shortlist_events, validate_assessment, validate_shortlist,
 )
 from news_fetcher import parse_rss
+from news_corroboration import check_event, confirmed_item
 
 ARTIFACT_FILES = (
     "candidates.json", "shortlist.json", "evidence.json", "assessment.json",
@@ -99,6 +100,8 @@ def build_briefing(shortlist, assessment, evidence, now):
     ordered = sorted(shortlist["events"],
                      key=lambda event: (-event["priority"], event["event_id"]))
     review_queue = []
+    items = []
+    decisions = []
     exclusions = []
     for event in ordered:
         evaluation = assessed[event["event_id"]]
@@ -110,10 +113,17 @@ def build_briefing(shortlist, assessment, evidence, now):
                 if source_id not in seen:
                     sources.append(records[source_id])
                     seen.add(source_id)
+        decision = check_event(evaluation, records, now)
+        decisions.append({"event_id": event["event_id"], **decision})
+        if decision["passed"]:
+            if len(items) < 3:
+                items.append(confirmed_item(evaluation, decision, event))
+            continue
         has_article = any(record.get("article", {}).get("status") == "retrieved"
                           for record in sources)
         reasons = ["article_completeness_unestablished" if has_article else
                    "full_article_evidence_missing", "reporting_independence_unestablished"]
+        reasons.extend(decision["reasons"])
         if any(record["content_scope"] == "headline_only" for record in sources):
             reasons.append("headline_only_evidence")
         # No branch can promote a new/unknown evidence type to confirmed.
@@ -153,19 +163,20 @@ def build_briefing(shortlist, assessment, evidence, now):
                 "exclusion_reasons": reasons,
             })
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "date_utc": now.date().isoformat(),
         "generated_at": now.isoformat(),
         "model": MODEL,
-        "pipeline_status": "completed_with_evidence_shortfall",
+        "pipeline_status": "completed" if len(items) == 3 else "completed_with_evidence_shortfall",
         "requested_count": 3,
-        "confirmed_count": 0,
-        "shortfall_count": 3,
+        "confirmed_count": len(items),
+        "shortfall_count": 3 - len(items),
         "shortfall_reason": (
-            "Retrieved headlines and any article text remain unverified. "
-            "Article completeness and independent reporting provenance are not established."
-        ),
-        "items": [],
+            "Fewer than three events passed claim-level checks for two attributed reporting chains. "
+            "Held drafts remain unverified."
+        ) if len(items) < 3 else "",
+        "items": items,
+        "corroboration_decisions": decisions,
         "review_queue": review_queue,
         "exclusions": exclusions,
     }
@@ -176,11 +187,16 @@ def render_report(briefing):
     lines = [
         "DAILY NEWS — RESEARCH REVIEW",
         "UTC date: " + briefing["date_utc"],
-        "Confirmed stories: 0/3",
+        "Corroborated stories: " + str(briefing["confirmed_count"]) + "/3",
         briefing["shortfall_reason"],
         "",
-        "UNVERIFIED DRAFT LEADS — NOT A CONFIRMED NEWS BRIEFING",
     ]
+    for index, item in enumerate(briefing["items"], 1):
+        lines.extend([f"{index}. {item['headline']}", "Corroborated claims: " + item["summary"],
+                      "Significance (analysis): " + item["why_it_matters_analysis"]])
+        for source in item["sources"]:
+            lines.append(source["publisher"] + ": " + source["url"])
+    lines.extend(["", "UNVERIFIED DRAFT LEADS — NOT A CONFIRMED NEWS BRIEFING"])
     for index, event in enumerate(briefing.get("review_queue", []), 1):
         lines.extend([
             "", f"{index}. {event['working_headline']}",
@@ -259,18 +275,19 @@ def run_pipeline(output_root="output", now=None, collector=collect_candidates,
         write_json(folder / "briefing.json", briefing)
         (folder / "briefing.txt").write_text(render_report(briefing), encoding="utf-8")
         write_json(folder / "run_status.json", {
-            "status": "completed_with_evidence_shortfall",
+            "status": briefing["pipeline_status"],
             "model": MODEL, "generated_at": now.isoformat(),
             "candidate_count": len(candidates["records"]),
             "review_lead_count": len(briefing["review_queue"]),
-            "confirmed_count": 0,
+            "confirmed_count": briefing["confirmed_count"],
             "article_retrieved_count": evidence.get("article_retrieval", {}).get("retrieved_count", 0),
             "search_failure_count": sum(
                 item["status"] != "completed" for item in evidence["searches"]
             ),
         })
         print(f"PASS: research pipeline completed; {len(candidates['records'])} "
-              f"candidates, {len(briefing['review_queue'])} draft leads, 0 confirmed.")
+              f"candidates, {len(briefing['review_queue'])} draft leads, "
+              f"{briefing['confirmed_count']} corroborated.")
         article_count = evidence.get("article_retrieval", {}).get("retrieved_count", 0)
         print(f"Article text retrieved: {article_count}. Independence remains unestablished. Outputs: {folder}")
         return briefing
@@ -297,8 +314,9 @@ def main():
     parser.add_argument("--output-dir", default="output")
     args = parser.parse_args()
     try:
-        from news_article_evidence import retrieve_article_evidence
-        run_pipeline(args.output_dir, article_enricher=retrieve_article_evidence)
+        from news_article_evidence import retrieve_article_evidence, collect_candidates_with_originals
+        run_pipeline(args.output_dir, collector=collect_candidates_with_originals,
+                     article_enricher=retrieve_article_evidence)
     except PipelineError as error:
         print(f"FAIL: {error}", file=sys.stderr)
         return 1

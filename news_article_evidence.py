@@ -8,6 +8,7 @@ import argparse
 import hashlib
 import re
 import xml.etree.ElementTree as ET
+from functools import lru_cache
 from datetime import timedelta
 from difflib import SequenceMatcher
 from email.utils import parsedate_to_datetime
@@ -17,7 +18,7 @@ from urllib.parse import urlsplit, urlunsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from news_article_reader import ArticleReadError, read_article, validate_article_url
-from news_collector import title_fingerprint
+from news_collector import title_fingerprint, collect_candidates, merge_records, normalize_article
 
 BBC_FEEDS = (
     "https://feeds.bbci.co.uk/news/rss.xml",
@@ -28,10 +29,12 @@ BBC_FEEDS = (
 )
 MAX_ARTICLES = 6
 MAX_TEXT_CHARS = 5000
+GUARDIAN_FEEDS = tuple("https://www.theguardian.com/" + section + "/rss"
+                       for section in ("world", "business", "technology", "science"))
 
 
 def headline_key(title):
-    title = re.sub(r"\s+[-|]\s+(?:BBC(?: News)?|BBC\.com)$", "", title, flags=re.I)
+    title = re.sub(r"\s+[-|]\s+(?:BBC(?: News)?|BBC\.com|The Guardian)$", "", title, flags=re.I)
     return re.sub(r"[\W_]+", " ", unescape(title).casefold()).strip()
 
 
@@ -63,8 +66,9 @@ class NoFeedRedirects(HTTPRedirectHandler):
         raise ArticleReadError("publisher_feed_redirect_refused")
 
 
+@lru_cache(maxsize=12)
 def fetch_publisher_feed(url):
-    if url not in BBC_FEEDS:
+    if url not in BBC_FEEDS + GUARDIAN_FEEDS:
         raise ArticleReadError("unsupported_publisher_feed")
     request = Request(url, headers={"User-Agent": "daily_news/0.5 (personal RSS reader)"})
     with build_opener(NoFeedRedirects()).open(request, timeout=15) as response:
@@ -108,6 +112,86 @@ def index_bbc_feeds(now, fetcher=fetch_publisher_feed):
     return index, diagnostics
 
 
+def index_guardian_feeds(now, fetcher=fetch_publisher_feed):
+    from news_guardian_reader import validate_guardian_url
+    index, diagnostics = {}, []
+    for feed in GUARDIAN_FEEDS:
+        try:
+            root = ET.fromstring(fetcher(feed))
+            for item in root.findall("./channel/item"):
+                try:
+                    title = (item.findtext("title") or "").strip()
+                    url = validate_guardian_url((item.findtext("link") or "").strip())
+                    date = parsedate_to_datetime(item.findtext("pubDate") or "")
+                    if date.tzinfo is None or not -timedelta(minutes=15) <= now - date <= timedelta(hours=48):
+                        continue
+                    key = headline_key(title)
+                    if key:
+                        index.setdefault(key, {})[urlsplit(url).path] = {
+                            "url": url, "feed_article_url": url, "feed_url": feed,
+                            "title": title, "published_at": date.isoformat(),
+                        }
+                except (ValueError, TypeError, AttributeError, OverflowError):
+                    continue
+            diagnostics.append({"feed_url": feed, "status": "completed"})
+        except Exception:
+            diagnostics.append({"feed_url": feed, "status": "feed_unavailable"})
+    return index, diagnostics
+
+
+def resolve_original(record, indexes):
+    if record["publisher"] == "BBC News":
+        return resolve_bbc_record(record, indexes.get("BBC News", {}))
+    from news_guardian_reader import validate_guardian_url
+    if record["publisher"] != "The Guardian":
+        raise ArticleReadError("publisher_reader_not_implemented")
+    try:
+        url = validate_guardian_url(record["url"])
+        return {"url": url, "feed_article_url": url, "basis": "direct_collected_article_path"}
+    except ArticleReadError:
+        pass
+    matches = indexes.get("The Guardian", {}).get(headline_key(record["title"]), {})
+    if len(matches) != 1:
+        raise ArticleReadError("ambiguous_original_article" if matches else "original_article_not_in_feeds")
+    return {**next(iter(matches.values())), "basis": "exact_publisher_headline_match"}
+
+
+def collect_candidates_with_originals(now, collector=collect_candidates, feed_fetcher=fetch_publisher_feed):
+    """Add a bounded set of fresh publisher originals without duplicate outlets."""
+    from datetime import datetime
+    base = collector(now)
+    rows = {(row["publisher"], headline_key(row["title"])): row for row in base["records"]}
+    feed_status = []
+    for publisher, indexer, domain in (("BBC News", index_bbc_feeds, "https://www.bbc.com"),
+                                        ("The Guardian", index_guardian_feeds, "https://www.theguardian.com")):
+        index, diagnostics = indexer(now, feed_fetcher)
+        feed_status.extend(diagnostics)
+        counts = {}
+        for matches in index.values():
+            if len(matches) != 1:
+                continue
+            original = next(iter(matches.values()))
+            feed = original["feed_url"]
+            category = ("Economy" if "business" in feed else "Technology" if "technology" in feed
+                        else "Science" if "science" in feed else "World")
+            if counts.get(category, 0) >= 3:
+                continue
+            row = normalize_article({"title": original["title"], "url": original["url"],
+                                     "published": format_datetime(datetime.fromisoformat(original["published_at"])),
+                                     "publisher": publisher, "publisher_url": domain}, now, feed, category)
+            key = (publisher, headline_key(row["title"]))
+            previous = rows.get(key)
+            if previous:
+                row["categories"] = sorted(set(row["categories"] + previous["categories"]))
+                row["feed_urls"] = sorted(set(row["feed_urls"] + previous["feed_urls"]))
+                row["collected_alias_urls"] = [previous["url"]]
+            rows[key] = row
+            counts[category] = counts.get(category, 0) + 1
+    base["records"] = merge_records(list(rows.values()))[:100]
+    base["publisher_original_feed_status"] = feed_status
+    return base
+
+
 def resolve_bbc_record(record, index):
     if record["publisher"] != "BBC News":
         raise ArticleReadError("publisher_reader_not_implemented")
@@ -147,28 +231,54 @@ def retrieve_article_evidence(shortlist, evidence, now, reader=read_article,
     for event in sorted(shortlist["events"], key=lambda e: -e["priority"]):
         ids = result["event_sources"][event["event_id"]]
         selected = list(event["source_ids"]) + [sid for sid in ids if sid not in event["source_ids"]]
-        groups.append([sid for sid in selected if records[sid]["publisher"] == "BBC News"])
-    for position in range(max((len(group) for group in groups), default=0)):
-        for group in groups:
-            if position < len(group) and group[position] not in wanted:
-                wanted.append(group[position])
-    index, feed_status = index_bbc_feeds(now, feed_fetcher) if wanted else ({}, [])
+        group = [sid for sid in selected if records[sid]["publisher"] in ("BBC News", "The Guardian")]
+        first, rest, seen_publishers = [], [], set()
+        for sid in group:
+            publisher = records[sid]["publisher"]
+            if publisher in seen_publishers:
+                rest.append(sid)
+            else:
+                first.append(sid)
+                seen_publishers.add(publisher)
+        groups.append(first + rest)
+    # Spend the six-read budget on the highest-priority cross-publisher pairs
+    # first. Unpaired sources cannot by themselves meet the publication policy.
+    pairs = [group[:2] for group in groups if len({records[sid]["publisher"] for sid in group}) >= 2]
+    for group in pairs + groups:
+        for sid in group:
+            if sid not in wanted:
+                wanted.append(sid)
+    indexes, feed_status = {}, []
+    for publisher, indexer in (("BBC News", index_bbc_feeds), ("The Guardian", index_guardian_feeds)):
+        if any(records[sid]["publisher"] == publisher for sid in wanted):
+            indexes[publisher], diagnostics = indexer(now, feed_fetcher)
+            feed_status.extend(diagnostics)
     reads = []
     for source_id in wanted[:MAX_ARTICLES]:
         record = records[source_id]
         try:
-            original = resolve_bbc_record(record, index)
-            article = reader(original["url"])
+            original = resolve_original(record, indexes)
+            if record["publisher"] == "BBC News":
+                article = reader(original["url"])
+            else:
+                from news_guardian_reader import read_guardian_article
+                article = read_guardian_article(original["url"])
             if (article.get("status") != "retrieved"
                     or not same_article_headline(article.get("title", ""), record["title"])):
                 raise ArticleReadError("retrieved_article_title_mismatch")
             if (not isinstance(article.get("text"), str)
                     or len(article["text"].split()) < 100):
                 raise ArticleReadError("article_text_missing_or_too_short")
-            validate_article_url(article["retrieved_url"])
+            if record["publisher"] == "BBC News":
+                validate_article_url(article["retrieved_url"])
+            else:
+                from news_guardian_reader import validate_guardian_url
+                validate_guardian_url(article["retrieved_url"])
             if urlsplit(article["retrieved_url"]).path != urlsplit(original["url"]).path:
                 raise ArticleReadError("redirect_changed_article")
             text = article["text"][:MAX_TEXT_CHARS]
+            from news_provenance import reporting_provenance
+            provenance = reporting_provenance(article, record["publisher"], now)
             record["article"] = {
                 "source_id": source_id, "status": "retrieved",
                 "original_url": original["url"], "retrieved_url": article["retrieved_url"],
@@ -180,6 +290,8 @@ def retrieve_article_evidence(shortlist, evidence, now, reader=read_article,
                 "text_sha256": hashlib.sha256(text.encode()).hexdigest(),
                 "text_truncated": len(text) < len(article["text"]),
                 "wire_mentions": provenance_signals(article["text"]),
+                "reporting_provenance": provenance,
+                "metadata": article.get("metadata", {}),
                 "independence": "unknown", "completeness": "not_established",
                 "article_publication_date": "not_established",
             }
@@ -194,7 +306,7 @@ def retrieve_article_evidence(shortlist, evidence, now, reader=read_article,
     result["article_retrieval"] = {
         "attempts": reads, "publisher_feeds": feed_status,
         "budget_skipped_count": max(0, len(wanted) - MAX_ARTICLES),
-        "supported_publishers": ["BBC News"],
+        "supported_publishers": ["BBC News", "The Guardian"],
         "retrieved_count": sum(item["status"] == "retrieved" for item in reads),
         "max_articles": MAX_ARTICLES, "max_text_chars": MAX_TEXT_CHARS,
     }

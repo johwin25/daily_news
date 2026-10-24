@@ -9,6 +9,7 @@ from news_article_evidence import (
     BBC_FEEDS, MAX_ARTICLES, MAX_TEXT_CHARS, headline_key, index_bbc_feeds,
     provenance_signals, resolve_bbc_record, retrieve_article_evidence,
     same_article_headline,
+    collect_candidates_with_originals, GUARDIAN_FEEDS,
 )
 from news_article_reader import ArticleReadError
 from news_contracts import ContractError
@@ -44,6 +45,30 @@ def enriched():
 
 
 class ArticleEvidenceTests(unittest.TestCase):
+    def test_publisher_originals_are_fresh_bounded_and_replace_duplicate_google_links(self):
+        from news_collector import collect_candidates
+        base = {"records": records(), "feed_errors": []}
+        def fetch(url):
+            if url in BBC_FEEDS:
+                return feed()
+            return feed(title="SYNTHETIC Guardian sample",
+                        url="https://www.theguardian.com/science/2026/oct/19/sample")
+        result = collect_candidates_with_originals(NOW, collector=Mock(return_value=base),
+                                                   feed_fetcher=fetch)
+        bbc = [r for r in result["records"] if r["publisher"] == "BBC News"]
+        self.assertEqual(len(bbc), 1)
+        self.assertEqual(bbc[0]["url"], URL)
+        self.assertIn(records()[1]["url"], bbc[0]["collected_alias_urls"])
+        self.assertTrue(any(r["publisher"] == "The Guardian" for r in result["records"]))
+        self.assertEqual(len(result["publisher_original_feed_status"]), len(BBC_FEEDS)+len(GUARDIAN_FEEDS))
+
+    def test_optional_publisher_feed_failures_keep_original_collection(self):
+        base = {"records": records(), "feed_errors": []}
+        result = collect_candidates_with_originals(NOW, collector=Mock(return_value=base),
+            feed_fetcher=Mock(side_effect=TimeoutError("PRIVATE")))
+        self.assertEqual(len(result["records"]), 2)
+        self.assertNotIn("PRIVATE", str(result))
+
     def test_minor_title_edits_are_allowed_but_numbers_and_negation_are_not(self):
         self.assertTrue(same_article_headline(
             "Australian MP's condition improves after alleged car attack",
