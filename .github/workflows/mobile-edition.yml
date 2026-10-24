@@ -7,6 +7,8 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/mobile-edition.yml'
+      - 'web/**'
+      - 'push/send.js'
   schedule:
     - cron: '0 23 * * *' # 08:00 Asia/Seoul (following local day) (GitHub schedules are best-effort)
   pull_request:
