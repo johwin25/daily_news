@@ -19,7 +19,7 @@ def clean_url(value):
     return value if parsed.scheme == "https" and parsed.hostname else ""
 
 
-def export_briefing(data):
+def export_briefing(data, candidates=None):
     if not isinstance(data, dict):
         raise ValueError("invalid_briefing")
     status = data.get("pipeline_status")
@@ -53,12 +53,38 @@ def export_briefing(data):
                 "why_it_matters_draft": clean_text(entry.get("why_it_matters_draft"), 800),
                 "sources": sources,
             })
+    # Additional coverage is headline-only, never a verified or summarized claim.
+    additional = []
+    if status == "completed_with_evidence_shortfall" and isinstance(candidates, dict):
+        used = {source.get("url") for entry in data.get("review_queue", [])[:3]
+                for source in entry.get("sources", []) if isinstance(source, dict)}
+        chosen = set()
+        for record in candidates.get("records", []):
+            if len(additional) == 7:
+                break
+            if not isinstance(record, dict):
+                continue
+            url = clean_url(record.get("url"))
+            title = clean_text(record.get("title"), 240)
+            fingerprint = clean_text(record.get("title_fingerprint"), 80)
+            if not url or not title or url in used or title.casefold() in chosen:
+                continue
+            if fingerprint and fingerprint in chosen:
+                continue
+            chosen.add(title.casefold())
+            if fingerprint:
+                chosen.add(fingerprint)
+            categories = record.get("categories")
+            category = clean_text(categories[0], 60) if isinstance(categories, list) and categories else "More news"
+            additional.append({"headline": title, "category": category,
+                               "publisher": clean_text(record.get("publisher"), 120),
+                               "url": url, "status": "unverified_headline"})
     date = data.get("date_utc")
     if not isinstance(date, str) or len(date) != 10 or date[4] != "-" or date[7] != "-":
         raise ValueError("invalid_date")
     return {"schema_version": 1, "date_utc": date,
             "pipeline_status": status, "confirmed_count": 0,
-            "items": [], "review_queue": leads}
+            "items": [], "review_queue": leads, "additional_headlines": additional}
 
 
 def main():
@@ -66,7 +92,9 @@ def main():
     parser.add_argument("source", type=Path)
     parser.add_argument("destination", type=Path)
     args = parser.parse_args()
-    data = export_briefing(json.loads(args.source.read_text(encoding="utf-8")))
+    candidate_file = args.source.parent / "candidates.json"
+    candidates = json.loads(candidate_file.read_text(encoding="utf-8")) if candidate_file.is_file() else None
+    data = export_briefing(json.loads(args.source.read_text(encoding="utf-8")), candidates)
     args.destination.parent.mkdir(parents=True, exist_ok=True)
     args.destination.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print("PASS: sanitized reader edition; unverified research only; no confirmed news")
