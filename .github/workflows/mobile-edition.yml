@@ -3,7 +3,7 @@ name: Publish Daily News Website
 on:
   workflow_dispatch:
   schedule:
-    - cron: '15 0 * * *' # 09:15 Asia/Seoul (GitHub schedules are best-effort)
+    - cron: '0 23 * * *' # 08:00 Asia/Seoul (following local day) (GitHub schedules are best-effort)
   pull_request:
     branches: [main]
     paths:
