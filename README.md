@@ -193,3 +193,38 @@ phone delivery.
 Provider decoding schemas retain types, keys and enums but omit nested array
 and text length limits to reduce decoder complexity. Full array and text bounds
 remain enforced locally after each response.
+
+## Read one BBC article (Stage 3C, isolated first step)
+
+The standalone BBC reader retrieves visible article text from direct HTTPS
+`bbc.com/news/articles/...` or `bbc.co.uk/news/articles/...` links. It does not
+resolve Google News links or feed this text to Gemini yet. The existing research
+pipeline still reads headlines and publishes zero confirmed stories.
+
+```sh
+python news_article_reader.py https://www.bbc.com/news/articles/cq0ld9g9e913o
+```
+
+The result is saved in `output/article-reader/latest.json`, including the page
+title, extracted text blocks, requested/final URLs, retrieval time and word count.
+It is always labelled `unverified`. Extraction does not establish completeness,
+publication date, reporting independence, or factual accuracy. It uses only
+visible BBC text-block components, without bypassing access restrictions.
+
+On GitHub, open **Actions -> Test BBC Article Reader -> Run workflow** after the
+workflow is on `main`. Expected success:
+
+```text
+PASS: BBC article text retrieved; ... words, ... text blocks. Claims remain unverified.
+```
+
+Download the `bbc-article-reader-...` artifact to inspect `latest.json` (retained
+for three days). This workflow uses no API key and makes no Gemini calls. It
+also tests same-repository pull requests; forks run the offline checks only.
+
+The reader checks direct BBC article URLs and every redirect, uses a 25-second
+request timeout, caps HTML at 2 MB and requires a title plus at least 100 extracted
+words. Blocked/rate-limited pages, network errors, non-HTML responses and missing
+article text return failure diagnostics with a nonzero exit code. A failed rerun
+replaces an earlier result with an empty-text failure record. BBC layout changes
+can break extraction; word counts can change as the article is updated.
