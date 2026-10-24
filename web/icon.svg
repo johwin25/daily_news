@@ -1,1 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="96" fill="#191919"/><path d="M96 132h320v26H96zm0 55h320v22H96zm0 52h320v22H96zm0 54h144v100H96zm168 0h152v22H264zm0 42h152v22H264zm0 42h152v16H264z" fill="#fff"/><circle cx="392" cy="103" r="26" fill="#f27222"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Daily News">
+  <title>Daily News</title>
+  <rect width="512" height="512" rx="108" fill="#17222e"/>
+  <path d="M96 91h320" stroke="#b79a5c" stroke-width="4" stroke-linecap="round" opacity=".65"/>
+  <path d="M109 139h259l43 43v189c0 18-15 33-33 33H142c-19 0-33-14-33-33z" fill="#efe2c3"/>
+  <path d="M368 139v44h43" fill="#d3b984"/>
+  <path d="M368 139v44h43" fill="none" stroke="#17222e" stroke-width="8" stroke-linejoin="round"/>
+  <path d="M150 177h81c71 0 113 41 113 108s-42 108-113 108h-81z" fill="#17222e"/>
+  <path d="M191 216v138h38c44 0 69-25 69-69s-25-69-69-69z" fill="#efe2c3"/>
+  <path d="M228 216a70 70 0 0 1 60 35" fill="none" stroke="#b79a5c" stroke-width="9" stroke-linecap="round"/>
+  <path d="M131 424h250" stroke="#b79a5c" stroke-width="4" stroke-linecap="round" opacity=".65"/>
+  <path d="M367 332l20-10-9 23z" fill="#b79a5c"/>
+</svg>
