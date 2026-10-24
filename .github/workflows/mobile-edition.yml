@@ -1,17 +1,29 @@
-name: Build Mobile News Edition
+name: Publish Daily News Website
+
 on:
   workflow_dispatch:
   schedule:
-    - cron: '15 0 * * *' # 09:15 Asia/Seoul, best effort (Actions may delay)
+    - cron: '15 0 * * *' # 09:15 Asia/Seoul (GitHub schedules are best-effort)
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/mobile-edition.yml'
+      - 'news_public_export.py'
+      - 'test_news_public_export.py'
+      - 'web/**'
+
 permissions:
   contents: read
+
 concurrency:
-  group: daily-mobile-edition
+  group: pages-daily-news
   cancel-in-progress: false
+
 jobs:
-  edition:
+  tests:
+    name: Offline validation
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
@@ -19,20 +31,43 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Run offline tests
-        run: python -m unittest discover -v
-      - name: Generate research briefing
+      - run: python -m unittest discover -v
+
+  deploy:
+    name: Generate and publish website
+    needs: tests
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Generate fresh research
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python news_pipeline.py
-      - name: Export safe reader edition
+      - name: Export limited public edition
         run: |
           EDITION=$(date -u +%F)
           python news_public_export.py "output/$EDITION/briefing.json" "web/briefing.json"
-      - name: Upload preview site (not public)
-        uses: actions/upload-artifact@v4
+          python -c 'import json; from pathlib import Path; p=Path("web/briefing.json"); d=json.loads(p.read_text()); assert d["confirmed_count"] == 0 and d["items"] == []; assert "review_queue" in d; print("PASS: sanitized edition ready")'
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+      - name: Package only the reader directory
+        uses: actions/upload-pages-artifact@v3
         with:
-          name: mobile-edition-preview-${{ github.run_id }}
           path: web/
-          if-no-files-found: error
-          retention-days: 7
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
