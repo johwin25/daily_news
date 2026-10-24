@@ -1,8 +1,7 @@
 """Collect -> shortlist -> search -> compare -> conservative publication gate.
 
-This first pipeline retrieves headline metadata only. It produces useful draft
-leads, but deliberately publishes zero confirmed items until fuller evidence
-and reporting-chain provenance can be retrieved.
+Headline and bounded BBC article evidence produce draft leads. Confirmed items
+remain empty while article completeness and independent provenance are unknown.
 """
 import argparse
 import sys
@@ -111,12 +110,22 @@ def build_briefing(shortlist, assessment, evidence, now):
                 if source_id not in seen:
                     sources.append(records[source_id])
                     seen.add(source_id)
-        reasons = ["full_article_evidence_missing", "reporting_independence_unestablished"]
+        has_article = any(record.get("article", {}).get("status") == "retrieved"
+                          for record in sources)
+        reasons = ["article_completeness_unestablished" if has_article else
+                   "full_article_evidence_missing", "reporting_independence_unestablished"]
         if any(record["content_scope"] == "headline_only" for record in sources):
             reasons.append("headline_only_evidence")
         # No branch can promote a new/unknown evidence type to confirmed.
-        if any(record["content_scope"] != "headline_only" for record in sources):
+        if any(record["content_scope"] not in ("headline_only", "article_text")
+               for record in sources):
             reasons.append("unsupported_evidence_type")
+        if any(record.get("article", {}).get("wire_mentions") for record in sources):
+            reasons.append("wire_attribution_requires_review")
+        article_hashes = [record["article"]["text_sha256"] for record in sources
+                          if record.get("article", {}).get("status") == "retrieved"]
+        if len(set(article_hashes)) < len(article_hashes):
+            reasons.append("identical_article_text")
         fingerprints = [record["title_fingerprint"] for record in sources]
         if len(set(fingerprints)) != len(fingerprints):
             reasons.append("possible_copied_or_syndicated_headline")
@@ -134,7 +143,7 @@ def build_briefing(shortlist, assessment, evidence, now):
                 "category": event["category"],
                 "editorial_priority": event["priority"],
                 "status": "insufficient_evidence",
-                "verification_level": "headline_only",
+                "verification_level": "article_text_unverified" if has_article else "headline_only",
                 "draft_summary": evaluation["draft_summary"],
                 "why_it_matters_draft": evaluation["why_it_matters"],
                 "draft_origin": "unverified_model_output",
@@ -153,8 +162,8 @@ def build_briefing(shortlist, assessment, evidence, now):
         "confirmed_count": 0,
         "shortfall_count": 3,
         "shortfall_reason": (
-            "Only RSS headlines were retrieved. Full-article or primary evidence "
-            "and independent reporting provenance are not established."
+            "Retrieved headlines and any article text remain unverified. "
+            "Article completeness and independent reporting provenance are not established."
         ),
         "items": [],
         "review_queue": review_queue,
@@ -175,7 +184,7 @@ def render_report(briefing):
     for index, event in enumerate(briefing.get("review_queue", []), 1):
         lines.extend([
             "", f"{index}. {event['working_headline']}",
-            "Status: insufficient_evidence (headlines only)",
+            "Status: insufficient_evidence (" + event["verification_level"] + ")",
             "Draft summary: " + event["draft_summary"],
             "Draft significance: " + event["why_it_matters_draft"],
             "Held because: " + ", ".join(event["exclusion_reasons"]),
@@ -184,12 +193,23 @@ def render_report(briefing):
             lines.append(f"Source [{source['id']}]: {source['publisher']}")
             lines.append("  Retrieved headline: " + source["title"])
             lines.append("  Collected link: " + source["url"])
+            article = source.get("article", {})
+            if article.get("status") == "retrieved":
+                lines.append("  Retrieved article: " + article["retrieved_url"])
+                lines.append("  Article text retained: " + str(len(article["text"])) + " characters")
+                lines.append("  Reporting independence: unknown")
+                if article["wire_mentions"]:
+                    lines.append("  Wire mentions (review needed): " + ", ".join(article["wire_mentions"]))
+        for claim in event["claims"]:
+            lines.append("  Draft claim: " + claim["text"])
+            for citation in claim["evidence"]:
+                lines.append("    " + citation["scope"] + " [" + citation["source_id"] + "]: " + citation["quote"])
     return "\n".join(lines) + "\n"
 
 
 def run_pipeline(output_root="output", now=None, collector=collect_candidates,
                  shortlister=shortlist_events, searcher=search_google_news,
-                 assessor=compare_claims):
+                 assessor=compare_claims, article_enricher=None):
     now = now or utc_now()
     folder = Path(output_root) / now.date().isoformat()
     folder.mkdir(parents=True, exist_ok=True)
@@ -216,6 +236,9 @@ def run_pipeline(output_root="output", now=None, collector=collect_candidates,
         })
         stage = "followup_search"
         evidence = gather_evidence(shortlist, candidates["records"], now, searcher)
+        if article_enricher is not None:
+            stage = "article_retrieval"
+            evidence = article_enricher(shortlist, evidence, now)
         write_json(folder / "evidence.json", evidence)
         stage = "claim_comparison"
         if shortlist["events"]:
@@ -229,7 +252,7 @@ def run_pipeline(output_root="output", now=None, collector=collect_candidates,
         )
         write_json(folder / "assessment.json", {
             "origin": "unverified_model_output",
-            "content_scope": "headline_only", **assessment,
+            "content_scope": evidence["content_scope"], **assessment,
         })
         stage = "evidence_gate"
         briefing = build_briefing(shortlist, assessment, evidence, now)
@@ -241,13 +264,15 @@ def run_pipeline(output_root="output", now=None, collector=collect_candidates,
             "candidate_count": len(candidates["records"]),
             "review_lead_count": len(briefing["review_queue"]),
             "confirmed_count": 0,
+            "article_retrieved_count": evidence.get("article_retrieval", {}).get("retrieved_count", 0),
             "search_failure_count": sum(
                 item["status"] != "completed" for item in evidence["searches"]
             ),
         })
         print(f"PASS: research pipeline completed; {len(candidates['records'])} "
               f"candidates, {len(briefing['review_queue'])} draft leads, 0 confirmed.")
-        print(f"Evidence shortfall: headline-only sources. Outputs: {folder}")
+        article_count = evidence.get("article_retrieval", {}).get("retrieved_count", 0)
+        print(f"Article text retrieved: {article_count}. Independence remains unestablished. Outputs: {folder}")
         return briefing
     except Exception as error:
         # Only fixed messages produced by our own exception types may be saved.
@@ -272,7 +297,8 @@ def main():
     parser.add_argument("--output-dir", default="output")
     args = parser.parse_args()
     try:
-        run_pipeline(args.output_dir)
+        from news_article_evidence import retrieve_article_evidence
+        run_pipeline(args.output_dir, article_enricher=retrieve_article_evidence)
     except PipelineError as error:
         print(f"FAIL: {error}", file=sys.stderr)
         return 1
@@ -281,3 +307,4 @@ def main():
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
