@@ -47,6 +47,8 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python news_pipeline.py
+      - name: Export unverified leads for the newspaper web app
+        run: python news_web_export.py --run-url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
       - name: Show report or failure in run summary
         if: always()
         run: python news_report.py
