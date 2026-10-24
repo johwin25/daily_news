@@ -100,6 +100,7 @@ def model_records(records):
                 "wire_mentions": record["article"]["wire_mentions"],
                 "completeness": record["article"]["completeness"],
                 "text_truncated": record["article"]["text_truncated"],
+                "reporting_provenance": record["article"].get("reporting_provenance", {"origin": "unknown"}),
             }
     return result
 
@@ -138,7 +139,9 @@ Do not pad the count. Priority is an editorial 0-100 score, not truth."""
 
 
 def compare_claims(shortlist, records, event_sources, caller=call_model):
-    task = """For every shortlisted event, compare 1-4 discrete material claims.
+    task = """For every shortlisted event, compare 1-2 core material claims.
+Keep evidence concise: normally two source excerpts per claim, each under 350
+characters; use longer excerpts only when needed to retain source attribution.
 Use only IDs listed for that event in event_sources. Each evidence item needs
 an EXACT contiguous quote of 8-1000 characters and a scope: headline (quote
 from TITLE) or article_text (quote from the supplied article.text). Prefer
@@ -146,6 +149,13 @@ article_text when available. Never call a title excerpt article_text.
 Compare the same precise claim across sources; do not join unrelated events.
 A headline supporting a proposition is not full article verification.
 One publisher's article text does not establish independent corroboration.
+Mark a claim corroborated only if two different publishers' retrieved text
+supports the SAME factual proposition. For the publication gate to pass, each
+support quotation itself must explicitly attribute reporting to its own outlet
+(such as 'told the BBC' or 'told the Guardian'), with named bylines and fresh
+page dates. Unknown origins, copied wire reports and shared authors do not
+establish two reporting chains. Keep unsupported claims insufficient_evidence.
+Significance is analysis, not an independently verified factual claim.
 Mark support versus contradiction. Do not call reports independent without
 retrieved provenance. Summaries are unverified drafts. Return every shortlisted
 event once; unsupported details and uncertain significance belong in unresolved_issues."""
