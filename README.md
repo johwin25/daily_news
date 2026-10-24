@@ -294,3 +294,30 @@ Live validation on October 24, 2026, tested code commit
 These results establish the BBC text-to-model path and citation integrity. They
 do not establish factual accuracy or independent corroboration. Article readers
 for additional publishers and reporting-provenance checks are still required.
+
+## Newspaper web edition export
+
+`news_web_export.py` converts a successful research output into
+`output/web/edition.json`. The research workflow exports it after a successful
+pipeline run and includes it in the existing artifact. This export does not
+publish to the web app or schedule updates.
+
+The exporter retains at most three unverified leads, cited claim text, source
+publishers/URLs/timestamps, evidence scope, limitations and the originating run.
+It checks quote presence and event/source membership against `evidence.json`.
+The preview uses explicitly cited claims rather than a broader model draft.
+Failed outputs, unknown citations, unsupported status promotion and non-HTTPS
+source links are rejected. Empty editions stay empty; claims are never expanded
+into fabricated long articles.
+
+The private [Daily Fold web app](https://daily-fold-jason.cozycake3.chatgpt.site)
+loads a separately hosted `edition.json`. Its initial real-news edition was
+imported from successful main run
+[40058801656](https://github.com/johwin25/daily_news/actions/runs/40058801656),
+generated October 24, 2026 at 03:33 UTC. It contains three unverified leads and
+zero confirmed stories. The app displays generation date, source links and
+headline-only labels. This is a saved snapshot: automatic backend publishing,
+daily refresh scheduling and push notifications remain separate work.
+
+Site source is maintained in its own Sites repository. Do not place GitHub or
+Gemini credentials in the browser or make the private news repository public.
