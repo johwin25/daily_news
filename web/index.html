@@ -4,6 +4,10 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#ffffff">
 <title>Daily News | Briefing</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="./icon.svg">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Daily News">
 <style>
 :root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#191919;background:#fff;font-synthesis:none}
 *{box-sizing:border-box}body{margin:0}header{border-bottom:1px solid #dedede;padding:18px max(20px,calc((100vw - 900px)/2))}
@@ -78,4 +82,5 @@ function display(data){
   if(!confirmed.length&&!drafts.length)content.append(el("p","description","No stories are available in this edition."));
 }
 fetch("./briefing.json",{cache:"no-store"}).then(r=>{if(!r.ok)throw Error("Briefing unavailable");return r.json()}).then(display).catch(()=>{dateEl.textContent="Edition unavailable";content.replaceChildren(el("p","notice","The briefing could not be loaded. Please try again later."));});
+if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));
 </script></body></html>
