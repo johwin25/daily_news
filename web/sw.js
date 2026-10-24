@@ -1,5 +1,5 @@
 /* Shell-only cache: never cache daily JSON or private research. */
-const CACHE = "daily-news-shell-v5";
+const CACHE = "daily-news-shell-v6";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon.svg", "./push.js", "./push-config.js"];
 self.addEventListener("install", event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)));
@@ -19,7 +19,11 @@ self.addEventListener("fetch", event => {
   }
 });
 self.addEventListener("push", event => {
-  event.waitUntil(self.registration.showNotification("Your morning, in focus.",{body:"A fresh look at what matters today.",icon:"./icon.svg",data:{url:"./"},tag:"daily-news-edition"}));
+  let payload = {};
+  try { payload = event.data?.json() || {}; } catch { /* Default copy below. */ }
+  const title = typeof payload.title === "string" && payload.title.trim() ? payload.title : "The Morning Edition";
+  const body = typeof payload.body === "string" && payload.body.trim() ? payload.body : "Fresh off the press. Your daily briefing is here.";
+  event.waitUntil(self.registration.showNotification(title, {body,icon:"./icon.svg",data:{url:"./"},tag:"daily-news-edition"}));
 });
 self.addEventListener("notificationclick", event => {
   event.notification.close();
