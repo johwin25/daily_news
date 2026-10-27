@@ -29,29 +29,60 @@ server is for local development. The cloud onboarding UI offers no public previe
 - `style.css`: full dynamic viewport, safe-area padding, warm editorial overlay,
   portrait/landscape layouts, bounded scrollable summary, focus and reduced-motion styles.
 - `app.js`: local sample fixtures and DOM rendering; one visible/inert-aware story;
-  per-story expansion state; pointer direction locking and a single active turn.
+  per-story expansion state and a narrow navigation interface.
+- `curl-navigation.js`: pointer state machine, velocity/distance decisions, capture,
+  cancellation, bounds, keyboard alternatives and settling.
+- `curl-geometry.js`: pure material clipping, cylindrical deformation and perspective
+  compensation for the gripped point.
+- `curl-renderer.js`: WebGL surface, cached article snapshots, front/back lighting
+  and projected shadow. `curl-dom-renderer.js`: curved native-DOM fallback.
+- `vendor/`: unmodified html-to-image 1.11.13 browser bundle and MIT license;
+  only used to snapshot the existing article before a turn, not to render the UI.
 - `assets/`: four local illustrative photographs; attribution and license provenance
   in `assets/CREDITS.md`. Existing icons are referenced, never copied or modified.
-- `tests/reader.cjs`, `package.json`, `package-lock.json`: pinned Playwright interaction
+- `tests/reader.cjs`, `tests/curl.cjs`, `tests/geometry.mjs`, `package.json`, `package-lock.json`: pinned Playwright interaction
   tests. Browser-test dependencies only; the interface needs no build or npm runtime.
 - `.gitignore`: local browser dependencies and generated outputs.
 
-### Page-turn approximation
+### Curved sheet geometry and rendering
 
-A temporary, inert copy of the turning page rotates around its left edge in a
-1,400px perspective scene. A paper reverse, curved gradient edge, slight torsion,
-and progress-dependent shadow suggest a folded newspaper leaf. Forward turns
-peel away; backward turns lay the preceding leaf back down. Only transforms and
-shadow opacity change during the animation. This is a rigid CSS plane with a
-stylized curled edge, **not a physically deforming sheet or WebGL mesh**.
-Reduced motion switches stories immediately.
+This replaces the original rigid CSS flip. The sheet deforms continuously around
+an angled cylinder. The line from the gripped edge to the pointer determines
+its orientation; pointer distance determines radius (capped at 54 CSS pixels).
+Moving Y at the same X changes the actual fold axis, not just its shadow.
 
-Horizontal intent locks after a 12px movement and a 1.3:1 direction ratio.
-Vertical intent remains native scrolling (`touch-action: pan-y`). Turns commit
-past 18% of the reader width; shorter or cancelled drags settle back. Pointer
-capture is established before the source card is hidden. Input during settling
-is ignored rather than queued, so repeated swipes cannot skip multiple stories.
-Resize and preference changes safely resolve the in-progress animation.
+In material coordinates, distance `s` from the crease maps to
+`u = R sin(s/R)`, `z = R (1 - cos(s/R))` through the bend, then to a reversed
+flat sheet beyond half a circumference. A perspective-corrected crease keeps
+the gripped point under the screen-space pointer. The GPU surface uses 64 curved
+bands with shared boundary positions, blank warm paper on its reverse, continuous
+normal-based lighting and a blurred projected contact shadow. Article text on
+the reverse is deliberately omitted rather than mirrored.
+
+The article is captured once outside the interaction loop using the 20.6 KB
+MIT-licensed html-to-image bundle. It preserves the existing DOM layout and local
+photograph in a texture. Capture is prewarmed after image decoding and refreshed
+when the page, viewport or expansion state changes. Texture/snapshot resolution
+is capped at 1.5× pixel density. The settled page remains native accessible
+HTML; rasterization is only used during the temporary gesture. No data fetching
+or live-news integration is added.
+
+Without WebGL, while a snapshot is unavailable, on snapshot failure, or after a
+graphics-context loss, a 32-band native-DOM curved mesh provides the same geometry.
+That fallback is more expensive and may be less smooth. Reduced motion changes
+the story immediately with no curl. This is a cylindrical thin-sheet approximation,
+not a conical/cloth simulation or a claim of exact reproduction of the reference.
+The supplied screenshot and Markdown were used; the YouTube video was not viewed.
+
+Input states are `idle → tracking → dragging → settling-complete/cancel → idle`.
+A 12px threshold distinguishes intent; summary regions and controls protect their
+normal interactions. The transparent triangular bottom-corner grips reserve
+steep diagonal touch drags (`touch-action: none`) without covering the text.
+Elsewhere native vertical scrolling remains available. Release uses progress
+(28% width), recent velocity, a minimum 56px flick distance and reversal detection.
+New gestures during settling are ignored. Escape, pointer cancellation, lost
+capture, resize and visibility changes release resources and restore a stable
+page. Adjustable constants are in `curl-geometry.js`.
 
 ## Tests
 
@@ -72,7 +103,7 @@ npm test
 CHROMIUM_PATH=/usr/bin/chromium npm test
 ```
 
-The test starts and stops its own local server on port 8765. `ARTIFACTS` overrides
+The browser tests start and stop local servers on ports 8765 and 8766. `ARTIFACTS` overrides
 the screenshot directory, which defaults to `/tmp/daily-news-v2-screenshots`.
 No production workflows, notifications or external services are invoked.
 
@@ -88,10 +119,15 @@ Tests distinguish two methods:
    events have no browser-active pointer, checks deterministic cancellation and
    rapid-input state transitions.
 2. Chromium CDP touch input with `isMobile` and `hasTouch` exercises browser-routed
-   touch swipes, native vertical summary scrolling and touch cancellation.
+   touch swipes, native vertical summary scrolling and touch cancellation. Dedicated curl tests
+   also exercise held desktop mouse drags, fixed-X/varying-Y geometry, reversal,
+   velocity-sensitive release, orientation interruption, WebGL unavailability and
+   context loss. Pure geometry tests check gripped-point projection and clipping.
 
-Neither is actual iPhone hardware, Safari/WebKit, VoiceOver, or a frame-rate benchmark.
-Screenshots cover each viewport collapsed/expanded, a mid-turn frame and image failure.
+Neither substitutes for actual iPhone hardware, Safari/WebKit or VoiceOver testing.
+Screenshots cover each viewport collapsed/expanded, mid-turn frames at two Y positions, forward/backward and touch curls,
+image failure and the no-WebGL fallback. Frame intervals are recorded separately
+in `curl-frame-timing.json`; they measure this headless environment, not iPhone FPS.
 
 ## iPhone Safari acceptance checklist (manual, still outstanding)
 
