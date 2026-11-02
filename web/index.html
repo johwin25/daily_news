@@ -1,139 +1,30 @@
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#07101c">
-<title>Daily News | Briefing</title>
-<link rel="manifest" href="./manifest.webmanifest">
-<link rel="icon" type="image/png" href="./app-icon.png">
-<link rel="apple-touch-icon" href="./app-icon.png">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Daily News">
-<style>
-:root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#191919;background:#fff;font-synthesis:none}
-*{box-sizing:border-box}body{margin:0}header{border-bottom:1px solid #dedede;padding:18px max(20px,calc((100vw - 900px)/2))}
-.brand{font-size:27px;font-weight:850;letter-spacing:-1.5px}.brand b{color:#f27222}.eyebrow{font-size:12px;letter-spacing:1.7px;text-transform:uppercase;color:#666;font-weight:750}
-main{max-width:900px;margin:auto;padding:36px 20px 80px}h1{font-size:clamp(35px,8vw,62px);letter-spacing:-2px;margin:10px 0;line-height:1.04}h2{font-size:24px;letter-spacing:-.7px}
-.description{color:#5e5e5e;line-height:1.55}.status{display:inline-block;background:#f6f6f6;border:1px solid #dedede;border-radius:3px;padding:7px 10px;font-size:13px;font-weight:700;margin-top:12px}
-.story{border-top:1px solid #d8d8d8;padding:23px 0}.story h3{font-size:clamp(22px,5vw,30px);line-height:1.2;letter-spacing:-.7px;margin:10px 0}.story p{line-height:1.68;margin:11px 0}.tag{font-size:12px;font-weight:750;letter-spacing:1px;text-transform:uppercase;color:#a34c19}
-.photo-frame{position:relative;min-height:170px;background:#e9eef1;border-radius:3px;overflow:hidden}.photo-fallback{position:absolute;inset:0;display:grid;place-items:center;color:#52616b;font-weight:700;z-index:0}.photo-fallback[hidden]{display:none}.lead-image{position:relative;z-index:1;width:100%;aspect-ratio:16/9;object-fit:cover;display:block;background:transparent;margin:0;border-radius:3px}.photo-caption{font-size:11px!important;line-height:1.45!important;color:#757575;margin:5px 0 15px!important}.more-story{border-top:1px solid #dedede;padding:15px 0}.more-story a{color:#1b1b1b;font-weight:750;text-decoration:none;font-size:clamp(18px,4vw,22px);line-height:1.35}.more-story a:hover{text-decoration:underline}.more-story .tag{margin-bottom:6px}.more-source{color:#777;font-size:12px;margin-top:6px}summary{cursor:pointer;font-weight:700;padding:10px 0}details{background:#fafafa;border-left:3px solid #e4e4e4;padding:6px 14px;margin-top:17px}
-a{color:#ad4b13;overflow-wrap:anywhere}ul{padding-left:20px}li{margin:9px 0}.notice{background:#fff7ee;border-left:4px solid #e58c40;padding:15px;line-height:1.5;margin:20px 0}
-footer{margin-top:60px;color:#777;font-size:13px;border-top:1px solid #ddd;padding-top:20px}
-</style></head>
-<body><header><div class="brand">DAILY <b>NEWS</b></div></header>
-<main>
-<div class="eyebrow">Your daily briefing</div>
-<h1>Today's stories.</h1>
-<p class="description" id="date">Checking the latest available edition…</p>
-<div id="content" role="status" aria-live="polite"></div>
-<footer>Original short briefings with publisher attribution. Always consult primary reporting for important decisions.</footer>
-<section aria-label="Notifications" class="story"><h2>Phone notifications</h2><p class="description">Opt in to alerts when new research briefings are published.</p><button id="notification-toggle" type="button">Enable notifications</button><p id="push-status" class="description" role="status"></p></section></main>
-<script>
-"use strict";
-const content=document.getElementById("content");
-const dateEl=document.getElementById("date");
-const el=(name,cls,value)=>{const node=document.createElement(name);if(cls)node.className=cls;if(value!==undefined)node.textContent=String(value);return node;};
-// Story-related Commons photo first, curated category photograph otherwise.
-// All images are explicitly illustrative, never presented as the original event photo.
-function addIllustration(article,headline,category){
- const photos={
-  world:"https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1100&q=80",
-  economy:"https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=1100&q=80",
-  technology:"https://images.unsplash.com/photo-1518770660439-4636190af475?w=1100&q=80",
-  science:"https://images.unsplash.com/photo-1532094349884-543bc11b234d?w=1100&q=80"
- };
- const names={world:"Earth from space",economy:"Financial markets",technology:"Electronic components",science:"Scientific research"};
- const group=(category||"").toLowerCase();
- const key=Object.keys(photos).find(k=>group.includes(k))||"world";
- const frame=el("div","photo-frame");
- const img=el("img","lead-image");
- img.alt="Illustrative category photograph: "+names[key];
- img.loading="lazy";img.referrerPolicy="no-referrer";
- const caption=el("p","photo-caption","Illustrative image — not a photograph of the reported event. Category: "+names[key]+". Source: Unsplash.");
- const note=el("div","photo-fallback","Illustrative image: "+names[key]);
- frame.append(img,note);article.querySelector("h3")?.after(frame,caption);
- function categoryPhoto(){img.src=photos[key];img.alt="Illustrative category photograph: "+names[key];}
- img.onload=()=>{note.hidden=true;};
- img.onerror=()=>{if(img.dataset.fallback)return;img.dataset.fallback="1";categoryPhoto();};
- const tokens=new Set((headline.toLowerCase().match(/[a-z]{5,}/g)||[]).filter(w=>!["after","about","could","would","their","these","those","world","today","report","news","says","said"].includes(w)));
- if(tokens.size<2){img.dataset.fallback="1";categoryPhoto();return;}
- const params=new URLSearchParams({action:"query",generator:"search",gsrsearch:[...tokens].slice(0,5).join(" ")+" filetype:bitmap",gsrnamespace:"6",gsrlimit:"8",prop:"imageinfo",iiprop:"url|mime",iiurlwidth:"900",format:"json",origin:"*"});
- const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),3500);
- fetch("https://commons.wikimedia.org/w/api.php?"+params,{signal:controller.signal}).then(r=>r.json()).then(data=>{
-  const match=Object.values(data.query?.pages||{}).find(p=>{
-   const title=(p.title||"").toLowerCase(), info=p.imageinfo?.[0];
-   return [...tokens].filter(t=>title.includes(t)).length>=2&&info?.mime==="image/jpeg"&&info.thumburl?.startsWith("https://upload.wikimedia.org/");
-  });
-  if(!match){img.dataset.fallback="1";categoryPhoto();return;}
-  img.src=match.imageinfo[0].thumburl;
-  img.alt="Potentially related illustrative photo: "+match.title.replace(/^File:/,"");
-  caption.textContent="Illustrative image — not necessarily from the reported event. Source: Wikimedia Commons.";
- }).catch(()=>{img.dataset.fallback="1";categoryPhoto();}).finally(()=>clearTimeout(timeout));
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#f5f0e6"><title>Daily News</title><link rel="manifest" href="./manifest.webmanifest"><link rel="icon" href="./app-icon.png"><link rel="apple-touch-icon" href="./app-icon.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Daily News"><link rel="stylesheet" href="./page-turn.css"><style>
+:root{font-family:system-ui,-apple-system,sans-serif;color:#292925;background:#f5f0e6}*{box-sizing:border-box}body{margin:0}main{height:100svh;height:100dvh;max-height:100dvh}#reader{height:100%;width:min(100%,680px);margin:auto;background:#ddd}article{background:#283b3d;color:#fff}.story-photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}.photo-fallback{position:absolute;inset:0;display:grid;place-items:center;background:linear-gradient(145deg,#536b65,#233b43);font:italic 26px Georgia;color:#f3ead8}.mast{position:absolute;top:max(16px,env(safe-area-inset-top));left:22px;font-size:12px;letter-spacing:2px;color:white;text-shadow:0 1px 8px #000}.copy{position:absolute;bottom:0;left:0;right:0;max-height:72%;overflow:auto;padding:90px 24px max(28px,env(safe-area-inset-bottom));background:linear-gradient(transparent,#f5f0e6f2 25%,#f5f0e6 65%);color:#292925}.category{font-size:11px;letter-spacing:1.7px;text-transform:uppercase;color:#795544}.copy h1{font:normal clamp(30px,8vw,48px)/1.03 Georgia;margin:12px 0}.teaser{font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.summary{max-height:30dvh;overflow:auto;overscroll-behavior:contain;line-height:1.55}.read{border:0;background:none;padding:10px 0;color:#292925;text-decoration:underline;font-weight:700}.count{float:right;font-size:12px;margin-top:12px}.source{font-size:12px}.source a{color:#754631;display:block;margin-top:6px}.edition{position:absolute;top:max(18px,env(safe-area-inset-top));right:22px;color:white;font-size:11px;text-shadow:0 1px 8px #000}#message{padding:24px;color:#292925}#review{position:fixed;bottom:4px;left:8px;font-size:9px;color:#888} 
+</style></head><body><main><div id="reader" aria-live="polite"><div id="message">Loading today's edition…</div></div></main><small id="review"></small><section style="position:fixed;bottom:0;left:0;right:0;background:#f5f0e6ed;padding:6px 14px;font-size:11px"><button id="notification-toggle" type="button">Enable notifications</button><span id="push-status" role="status"></span></section><script type="module">
+import {PageTurn} from './page-turn.js';
+const root=document.querySelector('#reader'), msg=document.querySelector('#message');
+const safe=(v)=>typeof v==='string'?v:'';
+function createPage(item,index,total){
+ const page=document.createElement('article'), category=safe(item.category)||'News';
+ page.innerHTML='<div class="photo-fallback" aria-hidden="true">Daily News</div><img class="story-photo" alt=""><span class="mast">DAILY NEWS</span><span class="edition">'+(index+1)+' / '+total+'</span><div class="copy"><span class="category"></span><h1></h1><p class="teaser"></p><button class="read" aria-expanded="false">Read more</button><span class="count"></span><div class="summary" hidden></div><div class="source"></div></div>';
+ page.querySelector('.category').textContent=category;
+ page.querySelector('h1').textContent=safe(item.working_headline||item.headline)||'Untitled story';
+ const summary=safe(item.draft_summary||item.summary);
+ page.querySelector('.teaser').textContent=summary;
+ const expanded=page.querySelector('.summary'); expanded.textContent=summary;
+ const button=page.querySelector('.read');button.onclick=()=>{expanded.hidden=!expanded.hidden;button.textContent=expanded.hidden?'Read more':'Show less';button.setAttribute('aria-expanded',String(!expanded.hidden));};
+ const image=safe(item.image_url||item.image||item.photo_url);
+ const img=page.querySelector('img');if(/^https:\/\//i.test(image)){img.src=image;img.onload=()=>page.querySelector('.photo-fallback').hidden=true;img.onerror=()=>img.remove();}
+ const sources=Array.isArray(item.sources)?item.sources:[];
+ if(sources.length){const s=sources[0],url=s.article?.retrieved_url||s.url;try{const u=new URL(url);if(['https:','http:'].includes(u.protocol)){const a=document.createElement('a');a.href=u.href;a.target='_blank';a.rel='noopener noreferrer';a.textContent=(safe(s.publisher)||'Source')+' · Read original';page.querySelector('.source').append(a);}}catch{}}
+ return page;
 }
-function display(data){
-  content.replaceChildren();
-  if(!data || !Array.isArray(data.items) || !Array.isArray(data.review_queue)) throw Error("Invalid briefing structure");
-  dateEl.textContent=data.date_utc ? "Edition date (UTC): "+data.date_utc : "Edition date unavailable";
-  const confirmed=data.items.filter(x=>x && x.status==="confirmed");
-  const drafts=data.review_queue.filter(x=>x && x.status==="insufficient_evidence");
-  const summary=el("div","status",confirmed.length+" confirmed stories · "+drafts.length+" research leads");
-  content.append(summary);
-  if(data.pipeline_status==="failed") content.append(el("p","notice","The news research pipeline failed. No articles are available."));
-  else if(confirmed.length===0) content.append(el("p","notice","No stories have passed the verification gate. Research leads below are UNVERIFIED and must not be treated as confirmed news."));
-  const section=(title,items,isDraft)=>{
-    if(!items.length)return;
-    content.append(el("h2","",title));
-    items.slice(0,3).forEach(item=>{
-      const article=el("article","story");
-      article.append(el("div","tag",isDraft?"Unverified research lead":item.category||"News"));
-      const headline=item.working_headline||item.headline||"Untitled story";
-      article.append(el("h3","",headline));
-      addIllustration(article,headline,item.category);
-      const body=item.draft_summary||item.summary;
-      if(body)article.append(el("p","",body));
-      const why=item.why_it_matters_draft||item.why_it_matters;
-      if(why)article.append(el("p","", "Why it matters: "+why));
-      if(isDraft)article.append(el("p","description","Status: insufficient evidence. This AI-generated draft is not independently verified."));
-      const sources=Array.isArray(item.sources)?item.sources:[];
-      if(sources.length){
-        const details=el("details"),heading=el("summary","","Sources ("+sources.length+")"),list=el("ul");
-        sources.forEach(source=>{
-          const li=el("li"),publisher=el("span","",source.publisher||"Source");
-          li.append(publisher);
-          const url=source.article?.retrieved_url ||source.url;
-          try{
-            const parsed=new URL(url);
-            if(parsed.protocol==="https:"||parsed.protocol==="http:"){
-              li.append(document.createTextNode(" — "));
-              const link=el("a","",source.title||"Read source");
-              link.href=parsed.href;link.target="_blank";link.rel="noopener noreferrer";
-              li.append(link);
-            }
-          }catch{}
-          list.append(li);
-        });
-        details.append(heading,list);article.append(details);
-      }
-      content.append(article);
-    });
-  };
-  section("Confirmed stories",confirmed,false);
-  section("Research leads — unverified",drafts,true);
-  const others=(Array.isArray(data.additional_headlines)?data.additional_headlines:[]).slice(0,7);
-  if(others.length){
-    content.append(el("h2","","More headlines"));
-    others.forEach(item=>{
-      const article=el("article","more-story");article.append(el("div","tag",(item.category||"News")+" · Unverified headline"));
-      const link=el("a","",item.headline||"Untitled");try{
-       const u=new URL(item.url);if(u.protocol!=="https:")return;link.href=u.href;
-      }catch{return;}
-      link.target="_blank";link.rel="noopener noreferrer";article.append(link);
-      article.append(el("div","more-source",item.publisher||"Source link"));
-      content.append(article);
-    });
-  }
-  if(!confirmed.length&&!drafts.length&&!others.length)content.append(el("p","description","No stories are available in this edition."));
-}
-fetch("./briefing.json",{cache:"no-store"}).then(r=>{if(!r.ok)throw Error("Briefing unavailable");return r.json()}).then(display).catch(()=>{dateEl.textContent="Edition unavailable";content.replaceChildren(el("p","notice","The briefing could not be loaded. Please try again later."));});
-if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));
+fetch('./briefing.json',{cache:'no-store'}).then(r=>{if(!r.ok)throw Error();return r.json()}).then(data=>{
+ const stories=Array.isArray(data.items)?data.items.filter(x=>x?.status==='confirmed'):[];
+ if(!stories.length){root.innerHTML='<div id="message">No confirmed stories are available in this edition yet.</div>';return;}
+ const pages=stories.slice(0,3).map((x,i)=>createPage(x,i,Math.min(stories.length,3)));
+ root.replaceChildren();window.dailyNewsReader=new PageTurn(root,pages);
+ document.querySelector('#review').textContent=(data.review_queue||[]).length?'Additional research leads are unverified and not shown as confirmed stories.':'';
+}).catch(()=>{root.innerHTML='<div id="message">Today’s edition could not be loaded. Please try again later.</div>';});
+if('serviceWorker'in navigator)addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
 </script><script src="./push-config.js"></script><script src="./push.js" defer></script></body></html>
