@@ -8,6 +8,8 @@ on:
       - '.github/scripts/assemble_prototype_site.py'
       - '.github/workflows/prototype-pages.yml'
 
+  workflow_dispatch:
+
 permissions:
   contents: read
 
