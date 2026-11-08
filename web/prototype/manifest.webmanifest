@@ -1,0 +1,14 @@
+{
+  "id": "./",
+  "name": "Daily News 2.0",
+  "short_name": "Daily News 2",
+  "description": "Sample edition with interactive paper-curl navigation",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4ecdc",
+  "theme_color": "#f4ecdc",
+  "icons": [
+    {"src": "../app-icon.png", "sizes": "1254x1254", "type": "image/png", "purpose": "any"}
+  ]
+}

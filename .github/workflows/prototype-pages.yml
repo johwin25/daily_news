@@ -1,0 +1,102 @@
+name: Publish Daily News 2.0 Prototype
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web/prototype/**'
+      - '.github/scripts/assemble_prototype_site.py'
+      - '.github/workflows/prototype-pages.yml'
+
+permissions:
+  contents: read
+
+# Serialize with the existing publisher; do not race the daily edition.
+concurrency:
+  group: pages-daily-news
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}prototype/
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          path: prototype-source
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+          path: production-source
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify repository and publication safety
+        working-directory: prototype-source
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python -m unittest discover -v
+          python web/prototype/tests/test_publish_site.py
+      - name: Retain the edition currently published on the website
+        run: |
+          curl --fail --show-error --location --retry 3 --max-time 30 --max-filesize 2097152 --proto '=https' \
+            'https://johwin25.github.io/daily_news/briefing.json' \
+            --output "$RUNNER_TEMP/published-briefing.json"
+      - name: Assemble additive website artifact
+        run: |
+          python prototype-source/.github/scripts/assemble_prototype_site.py \
+            production-source/web prototype-source/web/prototype \
+            "$RUNNER_TEMP/published-briefing.json" "$RUNNER_TEMP/site" "$GITHUB_SHA"
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ runner.temp }}/site
+      - name: Publish website without news generation or notification delivery
+        id: deployment
+        uses: actions/deploy-pages@v4
+      - name: Verify public prototype, Home Screen manifest and original icon
+        env:
+          SITE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          python - <<'PY'
+          import hashlib, json, os, time, urllib.request
+          from pathlib import Path
+          base = os.environ['SITE_URL'].rstrip('/') + '/'
+          sha = os.environ['GITHUB_SHA']
+          def get(path):
+              with urllib.request.urlopen(base + path + '?release=' + sha, timeout=20) as response:
+                  assert response.status == 200
+                  return response.read()
+          for attempt in range(12):
+              try:
+                  marker = json.loads(get('prototype/deployment.json'))
+                  assert marker['commit'] == sha
+                  break
+              except Exception:
+                  if attempt == 11:
+                      raise
+                  time.sleep(5)
+          html = get('prototype/').decode()
+          assert 'apple-touch-icon' in html and 'manifest.webmanifest' in html
+          manifest = json.loads(get('prototype/manifest.webmanifest'))
+          assert manifest['start_url'] == './' and manifest['scope'] == './'
+          for filename in ('app.js', 'curl-renderer.js', 'curl-geometry.js', 'vendor/html-to-image.js'):
+              assert get('prototype/' + filename) == Path('prototype-source/web/prototype', filename).read_bytes()
+          assert get('app-icon.png') == Path('production-source/web/app-icon.png').read_bytes()
+          assert get('briefing.json') == Path(os.environ['RUNNER_TEMP'], 'published-briefing.json').read_bytes()
+          print('PASS: live prototype verified at ' + base + 'prototype/')
+          print('PASS: Home Screen manifest, original icon, and existing edition verified')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as report:
+              report.write('## Daily News 2.0 is published\n\n' + base + 'prototype/\n\n')
+              report.write('Sample stories only. No news generation or push notifications were run.\n')
+          PY

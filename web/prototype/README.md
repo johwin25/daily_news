@@ -1,6 +1,10 @@
 # Daily News 2.0 prototype
 
-An isolated, mobile-first sample edition on `feat/daily-news-v2-prototype`.
+Public Home Screen entry: https://johwin25.github.io/daily_news/prototype/
+See [PUBLISHING.md](./PUBLISHING.md) for publishing and iPhone instructions.
+
+An isolated, mobile-first sample edition, developed on `feat/daily-news-v2-prototype`
+and included in `main` for publication at its own route.
 Four explicitly fictional stories and four local archival photographs. No live
 news, credentials, notification permission requests, service-worker registration,
 production JSON reads, or deployment steps.
@@ -150,4 +154,5 @@ logo/icon assets, manifest, service worker, Python pipeline/tests, push files an
 workflows remain unchanged. Existing main-branch `web/**` deployment rules are
 untouched: **merging this branch would make the prototype deployable with web/**.
 Merge, deployment, workflow dispatch and notification delivery require separate,
-explicit approval. Nothing is pushed, merged, deployed or sent by this work.
+explicit approval. The November publication adds only the isolated route to the live site; it uses
+the separate publisher described in PUBLISHING.md without sending notifications.
